@@ -4,8 +4,12 @@ import "../web_modules/@material/mwc-top-app-bar.js";
 import "../web_modules/@material/mwc-icon-button.js";
 import "../web_modules/@material/mwc-textfield.js";
 
-import * as pki from "../web_modules/@pkijs/pkijs/index.js";
 import * as asn1 from "../web_modules/@pkijs/asn1js/asn1.js";
+
+import Certificate from "../web_modules/@pkijs/pkijs/Certificate.js";
+import AttributeTypeAndValue from "../web_modules/@pkijs/pkijs/AttributeTypeAndValue.js";
+import Extension from "../web_modules/@pkijs/pkijs/Extension.js";
+import BasicConstraints from "../web_modules/@pkijs/pkijs/BasicConstraints.js";
 
 class MainApplication extends LitElement {
   static styles = css`
@@ -35,23 +39,23 @@ class MainApplication extends LitElement {
 
     console.log(asn1);
 
-    const certificate = new pki.Certificate();
+    const certificate = new Certificate();
 
     //region Creation of a new X.509 certificate
     certificate.serialNumber = new asn1.Integer({ value: 1 });
-    certificate.issuer.typesAndValues.push(new pki.AttributeTypeAndValue({
+    certificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
         type: "2.5.4.6", // Country name
         value: new asn1.PrintableString({ value: "RU" })
     }));
-    certificate.issuer.typesAndValues.push(new pki.AttributeTypeAndValue({
+    certificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
         type: "2.5.4.3", // Common name
         value: new asn1.PrintableString({ value: "Test" })
     }));
-    certificate.subject.typesAndValues.push(new pki.AttributeTypeAndValue({
+    certificate.subject.typesAndValues.push(new AttributeTypeAndValue({
         type: "2.5.4.6", // Country name
         value: new asn1.PrintableString({ value: "RU" })
     }));
-    certificate.subject.typesAndValues.push(new pki.AttributeTypeAndValue({
+    certificate.subject.typesAndValues.push(new AttributeTypeAndValue({
         type: "2.5.4.3", // Common name
         value: new asn1.PrintableString({ value: "Test" })
     }));
@@ -62,12 +66,12 @@ class MainApplication extends LitElement {
     certificate.extensions = []; // Extensions are not a part of certificate by default, it's an optional array
 
     //region "BasicConstraints" extension
-    const basicConstr = new pki.BasicConstraints({
+    const basicConstr = new BasicConstraints({
         cA: true,
         pathLenConstraint: 3
     });
 
-    certificate.extensions.push(new pki.Extension({
+    certificate.extensions.push(new Extension({
         extnID: "2.5.29.19",
         critical: false,
         extnValue: basicConstr.toSchema().toBER(false),
@@ -84,7 +88,7 @@ class MainApplication extends LitElement {
 
     const keyUsage = new asn1.BitString({ valueHex: bitArray });
 
-    certificate.extensions.push(new pki.Extension({
+    certificate.extensions.push(new Extension({
         extnID: "2.5.29.15",
         critical: false,
         extnValue: keyUsage.toBER(false),
