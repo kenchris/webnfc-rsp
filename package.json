@@ -1,0 +1,32 @@
+{
+  "name": "webnfc-rsp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "snowpack": {
+    "dedupe": [
+      "lit-html"
+    ]
+  },
+  "scripts": {
+    "prepare": "snowpack",
+    "pkijs:init": "rm -rf \"./web_modules/@pkijs/pkijs\" && mkdir -p \"./web_modules/@pkijs/pkijs\" && cp node_modules/pkijs/src/* ./web_modules/@pkijs/pkijs && sed -i \"s/\\\"asn1js\\\"/\\\"..\\/asn1js\\/asn1.js\\\"/g\" ./web_modules/@pkijs/pkijs/* && sed -i \"s/\\\"pvutils\\\"/\\\"..\\/pvutils\\/utils.js\\\"/g\" ./web_modules/@pkijs/pkijs/* && sed -i \"s/\\\"bytestreamjs\\\"/\\\"..\\/bytestreamjs\\/bytestream.js\\\"/g\" ./web_modules/@pkijs/pkijs/*",
+    "asn1js:init": "rm -rf \"./web_modules/@pkijs/asn1js\" && mkdir -p \"./web_modules/@pkijs/asn1js\" && cp node_modules/asn1js/src/* ./web_modules/@pkijs/asn1js && sed -i \"s/\\\"pvutils\\\"/\\\"..\\/pvutils\\/utils.js\\\"/g\" ./web_modules/@pkijs/asn1js/*",
+    "pvutils:init": "rm -rf \"./web_modules/@pkijs/pvutils\" && mkdir -p \"./web_modules/@pkijs/pvutils\" && cp node_modules/pvutils/src/* ./web_modules/@pkijs/pvutils",
+    "bytestreamjs:init": "rm -rf \"./web_modules/@pkijs/bytestreamjs\" && mkdir -p \"./web_modules/@pkijs/bytestreamjs\" && cp node_modules/bytestreamjs/src/* ./web_modules/@pkijs/bytestreamjs",
+    "build": "npm run pkijs:init && npm run asn1js:init && npm run pvutils:init && npm run bytestreamjs:init"
+  },
+  "dependencies": {
+    "@material/mwc-drawer": "^0.12.0",
+    "@material/mwc-icon-button": "^0.12.0",
+    "@material/mwc-textfield": "^0.12.0",
+    "@material/mwc-top-app-bar": "^0.12.0",
+    "lit-element": "^2.2.1",
+    "lit-html": "^1.1.2",
+    "pkijs": "^2.1.83",
+    "snowpack": "^1.0.4"
+  },
+  "devDependencies": {},
+  "keywords": [],
+  "author": ""
+}
