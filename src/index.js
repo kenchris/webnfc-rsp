@@ -6,10 +6,12 @@ import "../web_modules/@material/mwc-textfield.js";
 
 import * as asn1 from "../web_modules/@pkijs/asn1js/asn1.js";
 
-import Certificate from "../web_modules/@pkijs/pkijs/Certificate.js";
-import AttributeTypeAndValue from "../web_modules/@pkijs/pkijs/AttributeTypeAndValue.js";
-import Extension from "../web_modules/@pkijs/pkijs/Extension.js";
-import BasicConstraints from "../web_modules/@pkijs/pkijs/BasicConstraints.js";
+import {
+  Certificate, 
+  AttributeTypeAndValue,
+  Extension,
+  BasicConstraints
+ } from "../web_modules/@pkijs/pkijs/pkijs.js";
 
 class MainApplication extends LitElement {
   static styles = css`

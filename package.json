@@ -9,12 +9,8 @@
     ]
   },
   "scripts": {
-    "prepare": "snowpack && npm run pkijs-build",
-    "pkijs:init": "rm -rf \"./web_modules/@pkijs/pkijs\" && mkdir -p \"./web_modules/@pkijs/pkijs\" && cp node_modules/pkijs/src/* ./web_modules/@pkijs/pkijs && sed -i \"s/\\\"asn1js\\\"/\\\"..\\/asn1js\\/asn1.js\\\"/g\" ./web_modules/@pkijs/pkijs/* && sed -i \"s/\\\"pvutils\\\"/\\\"..\\/pvutils\\/utils.js\\\"/g\" ./web_modules/@pkijs/pkijs/* && sed -i \"s/\\\"bytestreamjs\\\"/\\\"..\\/bytestreamjs\\/bytestream.js\\\"/g\" ./web_modules/@pkijs/pkijs/*",
-    "asn1js:init": "rm -rf \"./web_modules/@pkijs/asn1js\" && mkdir -p \"./web_modules/@pkijs/asn1js\" && cp node_modules/asn1js/src/* ./web_modules/@pkijs/asn1js && sed -i \"s/\\\"pvutils\\\"/\\\"..\\/pvutils\\/utils.js\\\"/g\" ./web_modules/@pkijs/asn1js/*",
-    "pvutils:init": "rm -rf \"./web_modules/@pkijs/pvutils\" && mkdir -p \"./web_modules/@pkijs/pvutils\" && cp node_modules/pvutils/src/* ./web_modules/@pkijs/pvutils",
-    "bytestreamjs:init": "rm -rf \"./web_modules/@pkijs/bytestreamjs\" && mkdir -p \"./web_modules/@pkijs/bytestreamjs\" && cp node_modules/bytestreamjs/src/* ./web_modules/@pkijs/bytestreamjs",
-    "pkijs-build": "npm run pkijs:init && npm run asn1js:init && npm run pvutils:init && npm run bytestreamjs:init"
+    "prepare": "snowpack && rollup -c rollup.config.js",
+    "serve": "es-dev-server --port 8081"
   },
   "dependencies": {
     "@material/mwc-drawer": "^0.12.0",
@@ -22,11 +18,16 @@
     "@material/mwc-textfield": "^0.12.0",
     "@material/mwc-top-app-bar": "^0.12.0",
     "lit-element": "^2.2.1",
-    "lit-html": "^1.1.2",
+    "lit-html": "^1.1.2"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^7.0.0",
+    "@rollup/plugin-replace": "^2.3.0",
     "pkijs": "^2.1.83",
+    "rollup": "^1.29.0",
+    "rollup-plugin-re": "^1.0.7",
     "snowpack": "^1.0.4"
   },
-  "devDependencies": {},
   "keywords": [],
   "author": ""
 }

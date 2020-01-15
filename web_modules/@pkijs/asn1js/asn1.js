@@ -1,38 +1,6 @@
+import { getParametersValue, checkBufferParams, bufferToHexCodes, utilConcatBuf, isEqualBuffer, utilToBase, padNumber, utilFromBase, utilDecodeTC, utilEncodeTC, utilConcatView } from '../pvutils/utils.js';
+
 /* eslint-disable indent */
-/*
- * Copyright (c) 2016-2018, Peculiar Ventures
- * All rights reserved.
- *
- * Author 2016-2018, Yury Strozhevsky <www.strozhevsky.com>.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its contributors
- *    may be used to endorse or promote products derived from this software without
- *    specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
- * OF SUCH DAMAGE.
- *
- */
-//**************************************************************************************
-import { getParametersValue, padNumber, isEqualBuffer, bufferToHexCodes, checkBufferParams, utilToBase, utilFromBase, utilEncodeTC, utilDecodeTC, utilConcatBuf, utilConcatView } from "../pvutils/utils.js";
 //**************************************************************************************
 //region Declaration of global variables
 //**************************************************************************************
@@ -126,7 +94,7 @@ class LocalBaseBlock
  * @property {ArrayBuffer} valueHex
  */
 //noinspection JSUnusedLocalSymbols
-export const HexBlock = BaseClass => class LocalHexBlockMixin extends BaseClass
+const HexBlock = BaseClass => class LocalHexBlockMixin extends BaseClass
 {
 	//**********************************************************************************
 	//noinspection JSUnusedGlobalSymbols
@@ -530,7 +498,6 @@ class LocalIdentificationBlock extends HexBlock(LocalBaseBlock)
 				case 34:
 					this.error = "Constructed encoding used for primitive type";
 					return (-1);
-				default:
 			}
 		}
 		//endregion
@@ -799,7 +766,7 @@ class LocalLengthBlock extends LocalBaseBlock
 //**************************************************************************************
 //region Declaration of value block class
 //**************************************************************************************
-export class ValueBlock extends LocalBaseBlock
+class ValueBlock extends LocalBaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -854,7 +821,7 @@ export class ValueBlock extends LocalBaseBlock
 //**************************************************************************************
 //region Declaration of basic ASN.1 block class
 //**************************************************************************************
-export class BaseBlock extends LocalBaseBlock
+class BaseBlock extends LocalBaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -1104,7 +1071,7 @@ class LocalPrimitiveValueBlock extends ValueBlock
 	//**********************************************************************************
 }
 //**************************************************************************************
-export class Primitive extends BaseBlock
+class Primitive extends BaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -1282,7 +1249,7 @@ class LocalConstructedValueBlock extends ValueBlock
 	//**********************************************************************************
 }
 //**************************************************************************************
-export class Constructed extends BaseBlock
+class Constructed extends BaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -1390,7 +1357,7 @@ class LocalEndOfContentValueBlock extends ValueBlock
 	//**********************************************************************************
 }
 //**************************************************************************************
-export class EndOfContent extends BaseBlock
+class EndOfContent extends BaseBlock
 {
 	//**********************************************************************************
 	constructor(paramaters = {})
@@ -1530,7 +1497,7 @@ class LocalBooleanValueBlock extends ValueBlock
 	//**********************************************************************************
 }
 //**************************************************************************************
-export class Boolean extends BaseBlock
+class Boolean extends BaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -1560,7 +1527,7 @@ export class Boolean extends BaseBlock
 //**************************************************************************************
 //region Declaration of ASN.1 Sequence and Set type classes
 //**************************************************************************************
-export class Sequence extends Constructed
+class Sequence extends Constructed
 {
 	//**********************************************************************************
 	/**
@@ -1586,7 +1553,7 @@ export class Sequence extends Constructed
 	//**********************************************************************************
 }
 //**************************************************************************************
-export class Set extends Constructed
+class Set extends Constructed
 {
 	//**********************************************************************************
 	/**
@@ -1616,7 +1583,7 @@ export class Set extends Constructed
 //**************************************************************************************
 //region Declaration of ASN.1 Null type class
 //**************************************************************************************
-export class Null extends BaseBlock
+class Null extends BaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -1815,7 +1782,7 @@ class LocalOctetStringValueBlock extends HexBlock(LocalConstructedValueBlock)
 	//**********************************************************************************
 }
 //**************************************************************************************
-export class OctetString extends BaseBlock
+class OctetString extends BaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -2065,7 +2032,7 @@ class LocalBitStringValueBlock extends HexBlock(LocalConstructedValueBlock)
 	//**********************************************************************************
 }
 //**************************************************************************************
-export class BitString extends BaseBlock
+class BitString extends BaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -2285,7 +2252,6 @@ class LocalIntegerValueBlock extends HexBlock(ValueBlock)
 					this._valueHex = updatedValueHex.slice(0);
 				}
 				break;
-			default:
 		}
 
 		return this.toBER(sizeOnly);
@@ -2549,7 +2515,7 @@ class LocalIntegerValueBlock extends HexBlock(ValueBlock)
 	//**********************************************************************************
 }
 //**************************************************************************************
-export class Integer extends BaseBlock
+class Integer extends BaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -2629,7 +2595,7 @@ export class Integer extends BaseBlock
 //**************************************************************************************
 //region Declaration of ASN.1 Enumerated type class
 //**************************************************************************************
-export class Enumerated extends Integer
+class Enumerated extends Integer
 {
 	//**********************************************************************************
 	/**
@@ -3089,7 +3055,7 @@ class LocalObjectIdentifierValueBlock extends ValueBlock
 /**
  * @extends BaseBlock
  */
-export class ObjectIdentifier extends BaseBlock
+class ObjectIdentifier extends BaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -3172,7 +3138,7 @@ class LocalUtf8StringValueBlock extends HexBlock(LocalBaseBlock)
 /**
  * @extends BaseBlock
  */
-export class Utf8String extends BaseBlock
+class Utf8String extends BaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -3624,7 +3590,7 @@ class LocalRelativeObjectIdentifierValueBlock extends ValueBlock {
 /**
  * @extends BaseBlock
  */
-export class RelativeObjectIdentifier extends BaseBlock
+class RelativeObjectIdentifier extends BaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -3708,7 +3674,7 @@ class LocalBmpStringValueBlock extends HexBlock(LocalBaseBlock)
 /**
  * @extends BaseBlock
  */
-export class BmpString extends BaseBlock
+class BmpString extends BaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -3866,7 +3832,7 @@ class LocalUniversalStringValueBlock extends HexBlock(LocalBaseBlock)
 /**
  * @extends BaseBlock
  */
-export class UniversalString extends BaseBlock
+class UniversalString extends BaseBlock
 {
 	//**********************************************************************************
 	/**
@@ -4109,7 +4075,7 @@ class LocalSimpleStringBlock extends BaseBlock
 /**
  * @extends LocalSimpleStringBlock
  */
-export class NumericString extends LocalSimpleStringBlock
+class NumericString extends LocalSimpleStringBlock
 {
 	//**********************************************************************************
 	/**
@@ -4138,7 +4104,7 @@ export class NumericString extends LocalSimpleStringBlock
 /**
  * @extends LocalSimpleStringBlock
  */
-export class PrintableString extends LocalSimpleStringBlock
+class PrintableString extends LocalSimpleStringBlock
 {
 	//**********************************************************************************
 	/**
@@ -4167,7 +4133,7 @@ export class PrintableString extends LocalSimpleStringBlock
 /**
  * @extends LocalSimpleStringBlock
  */
-export class TeletexString extends LocalSimpleStringBlock
+class TeletexString extends LocalSimpleStringBlock
 {
 	//**********************************************************************************
 	/**
@@ -4196,7 +4162,7 @@ export class TeletexString extends LocalSimpleStringBlock
 /**
  * @extends LocalSimpleStringBlock
  */
-export class VideotexString extends LocalSimpleStringBlock
+class VideotexString extends LocalSimpleStringBlock
 {
 	//**********************************************************************************
 	/**
@@ -4225,7 +4191,7 @@ export class VideotexString extends LocalSimpleStringBlock
 /**
  * @extends LocalSimpleStringBlock
  */
-export class IA5String extends LocalSimpleStringBlock
+class IA5String extends LocalSimpleStringBlock
 {
 	//**********************************************************************************
 	/**
@@ -4254,7 +4220,7 @@ export class IA5String extends LocalSimpleStringBlock
 /**
  * @extends LocalSimpleStringBlock
  */
-export class GraphicString extends LocalSimpleStringBlock
+class GraphicString extends LocalSimpleStringBlock
 {
 	//**********************************************************************************
 	/**
@@ -4283,7 +4249,7 @@ export class GraphicString extends LocalSimpleStringBlock
 /**
  * @extends LocalSimpleStringBlock
  */
-export class VisibleString extends LocalSimpleStringBlock
+class VisibleString extends LocalSimpleStringBlock
 {
 	//**********************************************************************************
 	/**
@@ -4312,7 +4278,7 @@ export class VisibleString extends LocalSimpleStringBlock
 /**
  * @extends LocalSimpleStringBlock
  */
-export class GeneralString extends LocalSimpleStringBlock
+class GeneralString extends LocalSimpleStringBlock
 {
 	//**********************************************************************************
 	/**
@@ -4341,7 +4307,7 @@ export class GeneralString extends LocalSimpleStringBlock
 /**
  * @extends LocalSimpleStringBlock
  */
-export class CharacterString extends LocalSimpleStringBlock
+class CharacterString extends LocalSimpleStringBlock
 {
 	//**********************************************************************************
 	/**
@@ -4374,7 +4340,7 @@ export class CharacterString extends LocalSimpleStringBlock
 /**
  * @extends VisibleString
  */
-export class UTCTime extends VisibleString
+class UTCTime extends VisibleString
 {
 	//**********************************************************************************
 	/**
@@ -4588,7 +4554,7 @@ export class UTCTime extends VisibleString
 /**
  * @extends VisibleString
  */
-export class GeneralizedTime extends VisibleString
+class GeneralizedTime extends VisibleString
 {
 	//**********************************************************************************
 	/**
@@ -4993,7 +4959,7 @@ export class GeneralizedTime extends VisibleString
 /**
  * @extends Utf8String
  */
-export class DATE extends Utf8String
+class DATE extends Utf8String
 {
 	//**********************************************************************************
 	/**
@@ -5022,7 +4988,7 @@ export class DATE extends Utf8String
 /**
  * @extends Utf8String
  */
-export class TimeOfDay extends Utf8String
+class TimeOfDay extends Utf8String
 {
 	//**********************************************************************************
 	/**
@@ -5051,7 +5017,7 @@ export class TimeOfDay extends Utf8String
 /**
  * @extends Utf8String
  */
-export class DateTime extends Utf8String
+class DateTime extends Utf8String
 {
 	//**********************************************************************************
 	/**
@@ -5080,7 +5046,7 @@ export class DateTime extends Utf8String
 /**
  * @extends Utf8String
  */
-export class Duration extends Utf8String
+class Duration extends Utf8String
 {
 	//**********************************************************************************
 	/**
@@ -5109,7 +5075,7 @@ export class Duration extends Utf8String
 /**
  * @extends Utf8String
  */
-export class TIME extends Utf8String
+class TIME extends Utf8String
 {
 	//**********************************************************************************
 	/**
@@ -5139,7 +5105,7 @@ export class TIME extends Utf8String
 //**************************************************************************************
 //region Declaration of special ASN.1 schema type Choice
 //**************************************************************************************
-export class Choice
+class Choice
 {
 	//**********************************************************************************
 	/**
@@ -5160,7 +5126,7 @@ export class Choice
 //**************************************************************************************
 //region Declaration of special ASN.1 schema type Any
 //**************************************************************************************
-export class Any
+class Any
 {
 	//**********************************************************************************
 	/**
@@ -5181,7 +5147,7 @@ export class Any
 //**************************************************************************************
 //region Declaration of special ASN.1 schema type Repeated
 //**************************************************************************************
-export class Repeated
+class Repeated
 {
 	//**********************************************************************************
 	/**
@@ -5207,7 +5173,7 @@ export class Repeated
 /**
  * @description Special class providing ability to have "toBER/fromBER" for raw ArrayBuffer
  */
-export class RawData
+class RawData
 {
 	//**********************************************************************************
 	/**
@@ -5601,7 +5567,7 @@ function LocalFromBER(inputBuffer, inputOffset, inputLength)
  * Major function for decoding ASN.1 BER array into internal library structuries
  * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array of bytes
  */
-export function fromBER(inputBuffer)
+function fromBER(inputBuffer)
 {
 	if(inputBuffer.byteLength === 0)
 	{
@@ -5628,12 +5594,11 @@ export function fromBER(inputBuffer)
  * @param {!Object} inputSchema Input ASN.1 schema to compare with
  * @return {{verified: boolean}|{verified:boolean, result: Object}}
  */
-export function compareSchema(root, inputData, inputSchema)
+function compareSchema(root, inputData, inputSchema)
 {
 	//region Special case for Choice schema element type
 	if(inputSchema instanceof Choice)
 	{
-		const choiceResult = false;
 
 		for(let j = 0; j < inputSchema.value.length; j++)
 		{
@@ -5647,7 +5612,6 @@ export function compareSchema(root, inputData, inputSchema)
 			}
 		}
 
-		if(choiceResult === false)
 		{
 			const _result = {
 				verified: false,
@@ -6093,7 +6057,7 @@ export function compareSchema(root, inputData, inputSchema)
  * @param {!Object} inputSchema Input ASN.1 schema to verify against to
  * @return {{verified: boolean}|{verified:boolean, result: Object}}
  */
-export function verifySchema(inputBuffer, inputSchema)
+function verifySchema(inputBuffer, inputSchema)
 {
 	//region Initial check
 	if((inputSchema instanceof Object) === false)
@@ -6130,10 +6094,12 @@ export function verifySchema(inputBuffer, inputSchema)
  * Converting from JSON to ASN.1 objects
  * @param {string|Object} json JSON string or object to convert to ASN.1 objects
  */
-export function fromJSON(json)
+function fromJSON(json)
 {
 	// TODO Implement
 }
 //**************************************************************************************
 //endregion
 //**************************************************************************************
+
+export { Any, BaseBlock, BitString, BmpString, Boolean, CharacterString, Choice, Constructed, DATE, DateTime, Duration, EndOfContent, Enumerated, GeneralString, GeneralizedTime, GraphicString, HexBlock, IA5String, Integer, Null, NumericString, ObjectIdentifier, OctetString, Primitive, PrintableString, RawData, RelativeObjectIdentifier, Repeated, Sequence, Set, TIME, TeletexString, TimeOfDay, UTCTime, UniversalString, Utf8String, ValueBlock, VideotexString, VisibleString, compareSchema, fromBER, fromJSON, verifySchema };

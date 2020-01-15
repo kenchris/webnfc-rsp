@@ -6,7 +6,7 @@
  *
  */
 //**************************************************************************************
-export class ByteStream
+class ByteStream
 {
 	//**********************************************************************************
 	// noinspection FunctionWithMultipleLoopsJS
@@ -42,7 +42,6 @@ export class ByteStream
 				case "hexstring":
 					this.fromHexString(parameters.hexstring);
 					break;
-				default:
 			}
 		}
 	}
@@ -1839,7 +1838,7 @@ export class ByteStream
 	//**********************************************************************************
 }
 //**************************************************************************************
-export class SeqStream 
+class SeqStream 
 {
 	//**********************************************************************************
 	/**
@@ -1912,7 +1911,6 @@ export class SeqStream
 				case "hexstring":
 					this.stream = new ByteStream({ hexstring: parameters.hexstring});
 					break;
-				default:
 			}
 		}
 	}
@@ -2846,7 +2844,7 @@ export class SeqStream
  * @param {?number} [length=null] Length of byte block to parse from
  * @returns {*}
  */
-export function parseByteMap(stream, map, elements, start = null, length = null)
+function parseByteMap(stream, map, elements, start = null, length = null)
 {
 	/*
 	 Map example:
@@ -3093,7 +3091,7 @@ const bitsToStringArray = [
 ];
 //endregion
 //**************************************************************************************
-export class BitStream
+class BitStream
 {
 	//**********************************************************************************
 	/**
@@ -3129,7 +3127,6 @@ export class BitStream
 				case "bitsCount":
 					this.bitsCount = parameters.bitsCount;
 					break;
-				default:
 			}
 		}
 	}
@@ -4035,7 +4032,7 @@ export class BitStream
 	//**********************************************************************************
 }
 //**************************************************************************************
-export class SeqBitStream
+class SeqBitStream
 {
 	//**********************************************************************************
 	constructor(parameters = {})
@@ -4062,7 +4059,6 @@ export class SeqBitStream
 				case "appendBlock":
 					this[key] = parameters[key];
 					break;
-				default:
 			}
 		}
 	}
@@ -4315,3 +4311,5 @@ export class SeqBitStream
 	//**********************************************************************************
 }
 //**************************************************************************************
+
+export { BitStream, ByteStream, SeqBitStream, SeqStream, parseByteMap };

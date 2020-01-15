@@ -4,7 +4,7 @@
  * @param {Date} date Date to convert from
  * @returns {Date}
  */
-export function getUTCDate(date)
+function getUTCDate(date)
 {
 	// noinspection NestedFunctionCallJS, MagicNumberJS
 	return new Date(date.getTime() + (date.getTimezoneOffset() * 60000));
@@ -17,7 +17,7 @@ export function getUTCDate(date)
  * @param {string} name
  * @param defaultValue
  */
-export function getParametersValue(parameters, name, defaultValue)
+function getParametersValue(parameters, name, defaultValue)
 {
 	// noinspection ConstantOnRightSideOfComparisonJS, NonBlockStatementBodyJS
 	if((parameters instanceof Object) === false)
@@ -38,7 +38,7 @@ export function getParametersValue(parameters, name, defaultValue)
  * @param {boolean} [insertSpace=false]
  * @returns {string}
  */
-export function bufferToHexCodes(inputBuffer, inputOffset = 0, inputLength = (inputBuffer.byteLength - inputOffset), insertSpace = false)
+function bufferToHexCodes(inputBuffer, inputOffset = 0, inputLength = (inputBuffer.byteLength - inputOffset), insertSpace = false)
 {
 	let result = "";
 	
@@ -70,7 +70,7 @@ export function bufferToHexCodes(inputBuffer, inputOffset = 0, inputLength = (in
  * @param {number} inputLength
  * @returns {boolean}
  */
-export function checkBufferParams(baseBlock, inputBuffer, inputOffset, inputLength)
+function checkBufferParams(baseBlock, inputBuffer, inputOffset, inputLength)
 {
 	// noinspection ConstantOnRightSideOfComparisonJS
 	if((inputBuffer instanceof ArrayBuffer) === false)
@@ -122,7 +122,7 @@ export function checkBufferParams(baseBlock, inputBuffer, inputOffset, inputLeng
  * @param {number} inputBase
  * @returns {number}
  */
-export function utilFromBase(inputBuffer, inputBase)
+function utilFromBase(inputBuffer, inputBase)
 {
 	let result = 0;
 	
@@ -145,7 +145,7 @@ export function utilFromBase(inputBuffer, inputBase)
  * @param {number} [reserved=0] Pre-defined number of bytes in output array (-1 = limited by function itself)
  * @returns {ArrayBuffer}
  */
-export function utilToBase(value, base, reserved = (-1))
+function utilToBase(value, base, reserved = (-1))
 {
 	const internalReserved = reserved;
 	let internalValue = value;
@@ -202,7 +202,7 @@ export function utilToBase(value, base, reserved = (-1))
  * Concatenate two ArrayBuffers
  * @param {...ArrayBuffer} buffers Set of ArrayBuffer
  */
-export function utilConcatBuf(...buffers)
+function utilConcatBuf(...buffers)
 {
 	//region Initial variables
 	let outputLength = 0;
@@ -234,7 +234,7 @@ export function utilConcatBuf(...buffers)
  * Concatenate two Uint8Array
  * @param {...Uint8Array} views Set of Uint8Array
  */
-export function utilConcatView(...views)
+function utilConcatView(...views)
 {
 	//region Initial variables
 	let outputLength = 0;
@@ -265,7 +265,7 @@ export function utilConcatView(...views)
  * The function must be called in scope of instance of "hexBlock" class ("valueHex" and "warnings" properties must be present)
  * @returns {number}
  */
-export function utilDecodeTC()
+function utilDecodeTC()
 {
 	const buf = new Uint8Array(this.valueHex);
 	
@@ -317,7 +317,7 @@ export function utilDecodeTC()
  * @param {number} value Value to encode
  * @returns {ArrayBuffer}
  */
-export function utilEncodeTC(value)
+function utilEncodeTC(value)
 {
 	// noinspection ConstantOnRightSideOfComparisonJS, ConditionalExpressionJS
 	const modValue = (value < 0) ? (value * (-1)) : value;
@@ -380,7 +380,7 @@ export function utilEncodeTC(value)
  * @param {!ArrayBuffer} inputBuffer2
  * @returns {boolean}
  */
-export function isEqualBuffer(inputBuffer1, inputBuffer2)
+function isEqualBuffer(inputBuffer1, inputBuffer2)
 {
 	// noinspection NonBlockStatementBodyJS
 	if(inputBuffer1.byteLength !== inputBuffer2.byteLength)
@@ -408,7 +408,7 @@ export function isEqualBuffer(inputBuffer1, inputBuffer2)
  * @param {number} inputNumber
  * @param {number} fullLength
  */
-export function padNumber(inputNumber, fullLength)
+function padNumber(inputNumber, fullLength)
 {
 	const str = inputNumber.toString(10);
 	
@@ -440,7 +440,7 @@ const base64UrlTemplate = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0
  * @param {boolean} skipLeadingZeros Skip leading zeros in input data or not
  * @returns {string}
  */
-export function toBase64(input, useUrlTemplate = false, skipPadding = false, skipLeadingZeros = false)
+function toBase64(input, useUrlTemplate = false, skipPadding = false, skipLeadingZeros = false)
 {
 	let i = 0;
 	
@@ -543,7 +543,7 @@ export function toBase64(input, useUrlTemplate = false, skipPadding = false, ski
  * @param {boolean} [cutTailZeros=false] If "true" then cut tailing zeroz from function result
  * @returns {string}
  */
-export function fromBase64(input, useUrlTemplate = false, cutTailZeros = false)
+function fromBase64(input, useUrlTemplate = false, cutTailZeros = false)
 {
 	// noinspection ConditionalExpressionJS
 	const template = (useUrlTemplate) ? base64UrlTemplate : base64Template;
@@ -632,7 +632,7 @@ export function fromBase64(input, useUrlTemplate = false, cutTailZeros = false)
 	return output;
 }
 //**************************************************************************************
-export function arrayBufferToString(buffer)
+function arrayBufferToString(buffer)
 {
 	let resultString = "";
 	const view = new Uint8Array(buffer);
@@ -644,7 +644,7 @@ export function arrayBufferToString(buffer)
 	return resultString;
 }
 //**************************************************************************************
-export function stringToArrayBuffer(str)
+function stringToArrayBuffer(str)
 {
 	const stringLength = str.length;
 	
@@ -666,7 +666,7 @@ const log2 = Math.log(2);
  * @param {number} length Current length of existing array
  * @returns {number}
  */
-export function nearestPowerOf2(length)
+function nearestPowerOf2(length)
 {
 	const base = (Math.log(length) / log2);
 	
@@ -682,9 +682,11 @@ export function nearestPowerOf2(length)
  * @param {Object} object Object to delete properties from
  * @param {Array.<string>} propsArray Array of properties names
  */
-export function clearProps(object, propsArray)
+function clearProps(object, propsArray)
 {
 	for(const prop of propsArray)
 		delete object[prop];
 }
 //**************************************************************************************
+
+export { arrayBufferToString, bufferToHexCodes, checkBufferParams, clearProps, fromBase64, getParametersValue, getUTCDate, isEqualBuffer, nearestPowerOf2, padNumber, stringToArrayBuffer, toBase64, utilConcatBuf, utilConcatView, utilDecodeTC, utilEncodeTC, utilFromBase, utilToBase };

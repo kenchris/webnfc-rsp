@@ -1,6577 +1,6 @@
-function unwrapExports (x) {
-	return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x['default'] : x;
-}
-
-function createCommonjsModule(fn, module) {
-	return module = { exports: {} }, fn(module, module.exports), module.exports;
-}
-
-//**************************************************************************************
-/**
- * Making UTC date from local date
- * @param {Date} date Date to convert from
- * @returns {Date}
- */
-function getUTCDate(date)
-{
-	// noinspection NestedFunctionCallJS, MagicNumberJS
-	return new Date(date.getTime() + (date.getTimezoneOffset() * 60000));
-}
-//**************************************************************************************
-// noinspection FunctionWithMultipleReturnPointsJS
-/**
- * Get value for input parameters, or set a default value
- * @param {Object} parameters
- * @param {string} name
- * @param defaultValue
- */
-function getParametersValue(parameters, name, defaultValue)
-{
-	// noinspection ConstantOnRightSideOfComparisonJS, NonBlockStatementBodyJS
-	if((parameters instanceof Object) === false)
-		return defaultValue;
-	
-	// noinspection NonBlockStatementBodyJS
-	if(name in parameters)
-		return parameters[name];
-	
-	return defaultValue;
-}
-//**************************************************************************************
-/**
- * Converts "ArrayBuffer" into a hexdecimal string
- * @param {ArrayBuffer} inputBuffer
- * @param {number} [inputOffset=0]
- * @param {number} [inputLength=inputBuffer.byteLength]
- * @param {boolean} [insertSpace=false]
- * @returns {string}
- */
-function bufferToHexCodes(inputBuffer, inputOffset = 0, inputLength = (inputBuffer.byteLength - inputOffset), insertSpace = false)
-{
-	let result = "";
-	
-	for(const item of (new Uint8Array(inputBuffer, inputOffset, inputLength)))
-	{
-		// noinspection ChainedFunctionCallJS
-		const str = item.toString(16).toUpperCase();
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, NonBlockStatementBodyJS
-		if(str.length === 1)
-			result += "0";
-		
-		result += str;
-		
-		// noinspection NonBlockStatementBodyJS
-		if(insertSpace)
-			result += " ";
-	}
-	
-	return result.trim();
-}
-//**************************************************************************************
-// noinspection JSValidateJSDoc, FunctionWithMultipleReturnPointsJS
-/**
- * Check input "ArrayBuffer" for common functions
- * @param {LocalBaseBlock} baseBlock
- * @param {ArrayBuffer} inputBuffer
- * @param {number} inputOffset
- * @param {number} inputLength
- * @returns {boolean}
- */
-function checkBufferParams(baseBlock, inputBuffer, inputOffset, inputLength)
-{
-	// noinspection ConstantOnRightSideOfComparisonJS
-	if((inputBuffer instanceof ArrayBuffer) === false)
-	{
-		// noinspection JSUndefinedPropertyAssignment
-		baseBlock.error = "Wrong parameter: inputBuffer must be \"ArrayBuffer\"";
-		return false;
-	}
-	
-	// noinspection ConstantOnRightSideOfComparisonJS
-	if(inputBuffer.byteLength === 0)
-	{
-		// noinspection JSUndefinedPropertyAssignment
-		baseBlock.error = "Wrong parameter: inputBuffer has zero length";
-		return false;
-	}
-	
-	// noinspection ConstantOnRightSideOfComparisonJS
-	if(inputOffset < 0)
-	{
-		// noinspection JSUndefinedPropertyAssignment
-		baseBlock.error = "Wrong parameter: inputOffset less than zero";
-		return false;
-	}
-	
-	// noinspection ConstantOnRightSideOfComparisonJS
-	if(inputLength < 0)
-	{
-		// noinspection JSUndefinedPropertyAssignment
-		baseBlock.error = "Wrong parameter: inputLength less than zero";
-		return false;
-	}
-	
-	// noinspection ConstantOnRightSideOfComparisonJS
-	if((inputBuffer.byteLength - inputOffset - inputLength) < 0)
-	{
-		// noinspection JSUndefinedPropertyAssignment
-		baseBlock.error = "End of input reached before message was fully decoded (inconsistent offset and length values)";
-		return false;
-	}
-	
-	return true;
-}
-//**************************************************************************************
-// noinspection FunctionWithMultipleReturnPointsJS
-/**
- * Convert number from 2^base to 2^10
- * @param {Uint8Array} inputBuffer
- * @param {number} inputBase
- * @returns {number}
- */
-function utilFromBase(inputBuffer, inputBase)
-{
-	let result = 0;
-	
-	// noinspection ConstantOnRightSideOfComparisonJS, NonBlockStatementBodyJS
-	if(inputBuffer.length === 1)
-		return inputBuffer[0];
-	
-	// noinspection ConstantOnRightSideOfComparisonJS, NonBlockStatementBodyJS
-	for(let i = (inputBuffer.length - 1); i >= 0; i--)
-		result += inputBuffer[(inputBuffer.length - 1) - i] * Math.pow(2, inputBase * i);
-	
-	return result;
-}
-//**************************************************************************************
-// noinspection FunctionWithMultipleLoopsJS, FunctionWithMultipleReturnPointsJS
-/**
- * Convert number from 2^10 to 2^base
- * @param {!number} value The number to convert
- * @param {!number} base The base for 2^base
- * @param {number} [reserved=0] Pre-defined number of bytes in output array (-1 = limited by function itself)
- * @returns {ArrayBuffer}
- */
-function utilToBase(value, base, reserved = (-1))
-{
-	const internalReserved = reserved;
-	let internalValue = value;
-	
-	let result = 0;
-	let biggest = Math.pow(2, base);
-	
-	// noinspection ConstantOnRightSideOfComparisonJS
-	for(let i = 1; i < 8; i++)
-	{
-		if(value < biggest)
-		{
-			let retBuf;
-			
-			// noinspection ConstantOnRightSideOfComparisonJS
-			if(internalReserved < 0)
-			{
-				retBuf = new ArrayBuffer(i);
-				result = i;
-			}
-			else
-			{
-				// noinspection NonBlockStatementBodyJS
-				if(internalReserved < i)
-					return (new ArrayBuffer(0));
-				
-				retBuf = new ArrayBuffer(internalReserved);
-				
-				result = internalReserved;
-			}
-			
-			const retView = new Uint8Array(retBuf);
-			
-			// noinspection ConstantOnRightSideOfComparisonJS
-			for(let j = (i - 1); j >= 0; j--)
-			{
-				const basis = Math.pow(2, j * base);
-				
-				retView[result - j - 1] = Math.floor(internalValue / basis);
-				internalValue -= (retView[result - j - 1]) * basis;
-			}
-			
-			return retBuf;
-		}
-		
-		biggest *= Math.pow(2, base);
-	}
-	
-	return new ArrayBuffer(0);
-}
-//**************************************************************************************
-// noinspection FunctionWithMultipleLoopsJS
-/**
- * Concatenate two ArrayBuffers
- * @param {...ArrayBuffer} buffers Set of ArrayBuffer
- */
-function utilConcatBuf(...buffers)
-{
-	//region Initial variables
-	let outputLength = 0;
-	let prevLength = 0;
-	//endregion
-	
-	//region Calculate output length
-	
-	// noinspection NonBlockStatementBodyJS
-	for(const buffer of buffers)
-		outputLength += buffer.byteLength;
-	//endregion
-	
-	const retBuf = new ArrayBuffer(outputLength);
-	const retView = new Uint8Array(retBuf);
-	
-	for(const buffer of buffers)
-	{
-		// noinspection NestedFunctionCallJS
-		retView.set(new Uint8Array(buffer), prevLength);
-		prevLength += buffer.byteLength;
-	}
-	
-	return retBuf;
-}
-//**************************************************************************************
-// noinspection FunctionWithMultipleLoopsJS
-/**
- * Concatenate two Uint8Array
- * @param {...Uint8Array} views Set of Uint8Array
- */
-function utilConcatView(...views)
-{
-	//region Initial variables
-	let outputLength = 0;
-	let prevLength = 0;
-	//endregion
-	
-	//region Calculate output length
-	// noinspection NonBlockStatementBodyJS
-	for(const view of views)
-		outputLength += view.length;
-	//endregion
-	
-	const retBuf = new ArrayBuffer(outputLength);
-	const retView = new Uint8Array(retBuf);
-	
-	for(const view of views)
-	{
-		retView.set(view, prevLength);
-		prevLength += view.length;
-	}
-	
-	return retView;
-}
-//**************************************************************************************
-// noinspection FunctionWithMultipleLoopsJS
-/**
- * Decoding of "two complement" values
- * The function must be called in scope of instance of "hexBlock" class ("valueHex" and "warnings" properties must be present)
- * @returns {number}
- */
-function utilDecodeTC()
-{
-	const buf = new Uint8Array(this.valueHex);
-	
-	// noinspection ConstantOnRightSideOfComparisonJS
-	if(this.valueHex.byteLength >= 2)
-	{
-		//noinspection JSBitwiseOperatorUsage, ConstantOnRightSideOfComparisonJS, LocalVariableNamingConventionJS, MagicNumberJS, NonShortCircuitBooleanExpressionJS
-		const condition1 = (buf[0] === 0xFF) && (buf[1] & 0x80);
-		// noinspection ConstantOnRightSideOfComparisonJS, LocalVariableNamingConventionJS, MagicNumberJS, NonShortCircuitBooleanExpressionJS
-		const condition2 = (buf[0] === 0x00) && ((buf[1] & 0x80) === 0x00);
-		
-		// noinspection NonBlockStatementBodyJS
-		if(condition1 || condition2)
-			this.warnings.push("Needlessly long format");
-	}
-	
-	//region Create big part of the integer
-	const bigIntBuffer = new ArrayBuffer(this.valueHex.byteLength);
-	const bigIntView = new Uint8Array(bigIntBuffer);
-	// noinspection NonBlockStatementBodyJS
-	for(let i = 0; i < this.valueHex.byteLength; i++)
-		bigIntView[i] = 0;
-	
-	// noinspection MagicNumberJS, NonShortCircuitBooleanExpressionJS
-	bigIntView[0] = (buf[0] & 0x80); // mask only the biggest bit
-	
-	const bigInt = utilFromBase(bigIntView, 8);
-	//endregion
-	
-	//region Create small part of the integer
-	const smallIntBuffer = new ArrayBuffer(this.valueHex.byteLength);
-	const smallIntView = new Uint8Array(smallIntBuffer);
-	// noinspection NonBlockStatementBodyJS
-	for(let j = 0; j < this.valueHex.byteLength; j++)
-		smallIntView[j] = buf[j];
-	
-	// noinspection MagicNumberJS
-	smallIntView[0] &= 0x7F; // mask biggest bit
-	
-	const smallInt = utilFromBase(smallIntView, 8);
-	//endregion
-	
-	return (smallInt - bigInt);
-}
-//**************************************************************************************
-// noinspection FunctionWithMultipleLoopsJS, FunctionWithMultipleReturnPointsJS
-/**
- * Encode integer value to "two complement" format
- * @param {number} value Value to encode
- * @returns {ArrayBuffer}
- */
-function utilEncodeTC(value)
-{
-	// noinspection ConstantOnRightSideOfComparisonJS, ConditionalExpressionJS
-	const modValue = (value < 0) ? (value * (-1)) : value;
-	let bigInt = 128;
-	
-	// noinspection ConstantOnRightSideOfComparisonJS
-	for(let i = 1; i < 8; i++)
-	{
-		if(modValue <= bigInt)
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS
-			if(value < 0)
-			{
-				const smallInt = bigInt - modValue;
-				
-				const retBuf = utilToBase(smallInt, 8, i);
-				const retView = new Uint8Array(retBuf);
-				
-				// noinspection MagicNumberJS
-				retView[0] |= 0x80;
-				
-				return retBuf;
-			}
-			
-			let retBuf = utilToBase(modValue, 8, i);
-			let retView = new Uint8Array(retBuf);
-			
-			//noinspection JSBitwiseOperatorUsage, MagicNumberJS, NonShortCircuitBooleanExpressionJS
-			if(retView[0] & 0x80)
-			{
-				//noinspection JSCheckFunctionSignatures
-				const tempBuf = retBuf.slice(0);
-				const tempView = new Uint8Array(tempBuf);
-				
-				retBuf = new ArrayBuffer(retBuf.byteLength + 1);
-				// noinspection ReuseOfLocalVariableJS
-				retView = new Uint8Array(retBuf);
-				
-				// noinspection NonBlockStatementBodyJS
-				for(let k = 0; k < tempBuf.byteLength; k++)
-					retView[k + 1] = tempView[k];
-				
-				// noinspection MagicNumberJS
-				retView[0] = 0x00;
-			}
-			
-			return retBuf;
-		}
-		
-		bigInt *= Math.pow(2, 8);
-	}
-	
-	return (new ArrayBuffer(0));
-}
-//**************************************************************************************
-// noinspection FunctionWithMultipleReturnPointsJS, ParameterNamingConventionJS
-/**
- * Compare two array buffers
- * @param {!ArrayBuffer} inputBuffer1
- * @param {!ArrayBuffer} inputBuffer2
- * @returns {boolean}
- */
-function isEqualBuffer(inputBuffer1, inputBuffer2)
-{
-	// noinspection NonBlockStatementBodyJS
-	if(inputBuffer1.byteLength !== inputBuffer2.byteLength)
-		return false;
-	
-	// noinspection LocalVariableNamingConventionJS
-	const view1 = new Uint8Array(inputBuffer1);
-	// noinspection LocalVariableNamingConventionJS
-	const view2 = new Uint8Array(inputBuffer2);
-	
-	for(let i = 0; i < view1.length; i++)
-	{
-		// noinspection NonBlockStatementBodyJS
-		if(view1[i] !== view2[i])
-			return false;
-	}
-	
-	return true;
-}
-//**************************************************************************************
-// noinspection FunctionWithMultipleReturnPointsJS
-/**
- * Pad input number with leade "0" if needed
- * @returns {string}
- * @param {number} inputNumber
- * @param {number} fullLength
- */
-function padNumber(inputNumber, fullLength)
-{
-	const str = inputNumber.toString(10);
-	
-	// noinspection NonBlockStatementBodyJS
-	if(fullLength < str.length)
-		return "";
-	
-	const dif = fullLength - str.length;
-	
-	const padding = new Array(dif);
-	// noinspection NonBlockStatementBodyJS
-	for(let i = 0; i < dif; i++)
-		padding[i] = "0";
-	
-	const paddingString = padding.join("");
-	
-	return paddingString.concat(str);
-}
-//**************************************************************************************
-const base64Template = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-const base64UrlTemplate = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=";
-//**************************************************************************************
-// noinspection FunctionWithMultipleLoopsJS, OverlyComplexFunctionJS, FunctionTooLongJS, FunctionNamingConventionJS
-/**
- * Encode string into BASE64 (or "base64url")
- * @param {string} input
- * @param {boolean} useUrlTemplate If "true" then output would be encoded using "base64url"
- * @param {boolean} skipPadding Skip BASE-64 padding or not
- * @param {boolean} skipLeadingZeros Skip leading zeros in input data or not
- * @returns {string}
- */
-function toBase64(input, useUrlTemplate = false, skipPadding = false, skipLeadingZeros = false)
-{
-	let i = 0;
-	
-	// noinspection LocalVariableNamingConventionJS
-	let flag1 = 0;
-	// noinspection LocalVariableNamingConventionJS
-	let flag2 = 0;
-	
-	let output = "";
-	
-	// noinspection ConditionalExpressionJS
-	const template = (useUrlTemplate) ? base64UrlTemplate : base64Template;
-	
-	if(skipLeadingZeros)
-	{
-		let nonZeroPosition = 0;
-		
-		for(let i = 0; i < input.length; i++)
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS
-			if(input.charCodeAt(i) !== 0)
-			{
-				nonZeroPosition = i;
-				// noinspection BreakStatementJS
-				break;
-			}
-		}
-		
-		// noinspection AssignmentToFunctionParameterJS
-		input = input.slice(nonZeroPosition);
-	}
-	
-	while(i < input.length)
-	{
-		// noinspection LocalVariableNamingConventionJS, IncrementDecrementResultUsedJS
-		const chr1 = input.charCodeAt(i++);
-		// noinspection NonBlockStatementBodyJS
-		if(i >= input.length)
-			flag1 = 1;
-		// noinspection LocalVariableNamingConventionJS, IncrementDecrementResultUsedJS
-		const chr2 = input.charCodeAt(i++);
-		// noinspection NonBlockStatementBodyJS
-		if(i >= input.length)
-			flag2 = 1;
-		// noinspection LocalVariableNamingConventionJS, IncrementDecrementResultUsedJS
-		const chr3 = input.charCodeAt(i++);
-		
-		// noinspection LocalVariableNamingConventionJS
-		const enc1 = chr1 >> 2;
-		// noinspection LocalVariableNamingConventionJS, MagicNumberJS, NonShortCircuitBooleanExpressionJS
-		const enc2 = ((chr1 & 0x03) << 4) | (chr2 >> 4);
-		// noinspection LocalVariableNamingConventionJS, MagicNumberJS, NonShortCircuitBooleanExpressionJS
-		let enc3 = ((chr2 & 0x0F) << 2) | (chr3 >> 6);
-		// noinspection LocalVariableNamingConventionJS, MagicNumberJS, NonShortCircuitBooleanExpressionJS
-		let enc4 = chr3 & 0x3F;
-		
-		// noinspection ConstantOnRightSideOfComparisonJS
-		if(flag1 === 1)
-		{
-			// noinspection NestedAssignmentJS, AssignmentResultUsedJS, MagicNumberJS
-			enc3 = enc4 = 64;
-		}
-		else
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS
-			if(flag2 === 1)
-			{
-				// noinspection MagicNumberJS
-				enc4 = 64;
-			}
-		}
-		
-		// noinspection NonBlockStatementBodyJS
-		if(skipPadding)
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, NonBlockStatementBodyJS, MagicNumberJS
-			if(enc3 === 64)
-				output += `${template.charAt(enc1)}${template.charAt(enc2)}`;
-			else
-			{
-				// noinspection ConstantOnRightSideOfComparisonJS, NonBlockStatementBodyJS, MagicNumberJS
-				if(enc4 === 64)
-					output += `${template.charAt(enc1)}${template.charAt(enc2)}${template.charAt(enc3)}`;
-				else
-					output += `${template.charAt(enc1)}${template.charAt(enc2)}${template.charAt(enc3)}${template.charAt(enc4)}`;
-			}
-		}
-		else
-			output += `${template.charAt(enc1)}${template.charAt(enc2)}${template.charAt(enc3)}${template.charAt(enc4)}`;
-	}
-	
-	return output;
-}
-//**************************************************************************************
-// noinspection FunctionWithMoreThanThreeNegationsJS, FunctionWithMultipleLoopsJS, OverlyComplexFunctionJS, FunctionNamingConventionJS
-/**
- * Decode string from BASE64 (or "base64url")
- * @param {string} input
- * @param {boolean} [useUrlTemplate=false] If "true" then output would be encoded using "base64url"
- * @param {boolean} [cutTailZeros=false] If "true" then cut tailing zeroz from function result
- * @returns {string}
- */
-function fromBase64(input, useUrlTemplate = false, cutTailZeros = false)
-{
-	// noinspection ConditionalExpressionJS
-	const template = (useUrlTemplate) ? base64UrlTemplate : base64Template;
-	
-	//region Aux functions
-	// noinspection FunctionWithMultipleReturnPointsJS, NestedFunctionJS
-	function indexof(toSearch)
-	{
-		// noinspection ConstantOnRightSideOfComparisonJS, MagicNumberJS
-		for(let i = 0; i < 64; i++)
-		{
-			// noinspection NonBlockStatementBodyJS
-			if(template.charAt(i) === toSearch)
-				return i;
-		}
-		
-		// noinspection MagicNumberJS
-		return 64;
-	}
-	
-	// noinspection NestedFunctionJS
-	function test(incoming)
-	{
-		// noinspection ConstantOnRightSideOfComparisonJS, ConditionalExpressionJS, MagicNumberJS
-		return ((incoming === 64) ? 0x00 : incoming);
-	}
-	//endregion
-	
-	let i = 0;
-	
-	let output = "";
-	
-	while(i < input.length)
-	{
-		// noinspection NestedFunctionCallJS, LocalVariableNamingConventionJS, IncrementDecrementResultUsedJS
-		const enc1 = indexof(input.charAt(i++));
-		// noinspection NestedFunctionCallJS, LocalVariableNamingConventionJS, ConditionalExpressionJS, MagicNumberJS, IncrementDecrementResultUsedJS
-		const enc2 = (i >= input.length) ? 0x00 : indexof(input.charAt(i++));
-		// noinspection NestedFunctionCallJS, LocalVariableNamingConventionJS, ConditionalExpressionJS, MagicNumberJS, IncrementDecrementResultUsedJS
-		const enc3 = (i >= input.length) ? 0x00 : indexof(input.charAt(i++));
-		// noinspection NestedFunctionCallJS, LocalVariableNamingConventionJS, ConditionalExpressionJS, MagicNumberJS, IncrementDecrementResultUsedJS
-		const enc4 = (i >= input.length) ? 0x00 : indexof(input.charAt(i++));
-		
-		// noinspection LocalVariableNamingConventionJS, NonShortCircuitBooleanExpressionJS
-		const chr1 = (test(enc1) << 2) | (test(enc2) >> 4);
-		// noinspection LocalVariableNamingConventionJS, MagicNumberJS, NonShortCircuitBooleanExpressionJS
-		const chr2 = ((test(enc2) & 0x0F) << 4) | (test(enc3) >> 2);
-		// noinspection LocalVariableNamingConventionJS, MagicNumberJS, NonShortCircuitBooleanExpressionJS
-		const chr3 = ((test(enc3) & 0x03) << 6) | test(enc4);
-		
-		output += String.fromCharCode(chr1);
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, NonBlockStatementBodyJS, MagicNumberJS
-		if(enc3 !== 64)
-			output += String.fromCharCode(chr2);
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, NonBlockStatementBodyJS, MagicNumberJS
-		if(enc4 !== 64)
-			output += String.fromCharCode(chr3);
-	}
-	
-	if(cutTailZeros)
-	{
-		const outputLength = output.length;
-		let nonZeroStart = (-1);
-		
-		// noinspection ConstantOnRightSideOfComparisonJS
-		for(let i = (outputLength - 1); i >= 0; i--)
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS
-			if(output.charCodeAt(i) !== 0)
-			{
-				nonZeroStart = i;
-				// noinspection BreakStatementJS
-				break;
-			}
-		}
-		
-		// noinspection NonBlockStatementBodyJS, NegatedIfStatementJS
-		if(nonZeroStart !== (-1))
-			output = output.slice(0, nonZeroStart + 1);
-		else
-			output = "";
-	}
-	
-	return output;
-}
-//**************************************************************************************
-function arrayBufferToString(buffer)
-{
-	let resultString = "";
-	const view = new Uint8Array(buffer);
-	
-	// noinspection NonBlockStatementBodyJS
-	for(const element of view)
-		resultString += String.fromCharCode(element);
-	
-	return resultString;
-}
-//**************************************************************************************
-function stringToArrayBuffer(str)
-{
-	const stringLength = str.length;
-	
-	const resultBuffer = new ArrayBuffer(stringLength);
-	const resultView = new Uint8Array(resultBuffer);
-	
-	// noinspection NonBlockStatementBodyJS
-	for(let i = 0; i < stringLength; i++)
-		resultView[i] = str.charCodeAt(i);
-	
-	return resultBuffer;
-}
-//**************************************************************************************
-const log2 = Math.log(2);
-//**************************************************************************************
-// noinspection FunctionNamingConventionJS
-/**
- * Get nearest to input length power of 2
- * @param {number} length Current length of existing array
- * @returns {number}
- */
-function nearestPowerOf2(length)
-{
-	const base = (Math.log(length) / log2);
-	
-	const floor = Math.floor(base);
-	const round = Math.round(base);
-	
-	// noinspection ConditionalExpressionJS
-	return ((floor === round) ? floor : round);
-}
-//**************************************************************************************
-/**
- * Delete properties by name from specified object
- * @param {Object} object Object to delete properties from
- * @param {Array.<string>} propsArray Array of properties names
- */
-function clearProps(object, propsArray)
-{
-	for(const prop of propsArray)
-		delete object[prop];
-}
-//**************************************************************************************
-
-var utils = /*#__PURE__*/Object.freeze({
-	__proto__: null,
-	getUTCDate: getUTCDate,
-	getParametersValue: getParametersValue,
-	bufferToHexCodes: bufferToHexCodes,
-	checkBufferParams: checkBufferParams,
-	utilFromBase: utilFromBase,
-	utilToBase: utilToBase,
-	utilConcatBuf: utilConcatBuf,
-	utilConcatView: utilConcatView,
-	utilDecodeTC: utilDecodeTC,
-	utilEncodeTC: utilEncodeTC,
-	isEqualBuffer: isEqualBuffer,
-	padNumber: padNumber,
-	toBase64: toBase64,
-	fromBase64: fromBase64,
-	arrayBufferToString: arrayBufferToString,
-	stringToArrayBuffer: stringToArrayBuffer,
-	nearestPowerOf2: nearestPowerOf2,
-	clearProps: clearProps
-});
-
-var asn1 = createCommonjsModule(function (module, exports) {
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.fromBER = fromBER;
-exports.compareSchema = compareSchema;
-exports.verifySchema = verifySchema;
-exports.fromJSON = fromJSON;
-exports.RawData = exports.Repeated = exports.Any = exports.Choice = exports.TIME = exports.Duration = exports.DateTime = exports.TimeOfDay = exports.DATE = exports.GeneralizedTime = exports.UTCTime = exports.CharacterString = exports.GeneralString = exports.VisibleString = exports.GraphicString = exports.IA5String = exports.VideotexString = exports.TeletexString = exports.PrintableString = exports.NumericString = exports.UniversalString = exports.BmpString = exports.RelativeObjectIdentifier = exports.Utf8String = exports.ObjectIdentifier = exports.Enumerated = exports.Integer = exports.BitString = exports.OctetString = exports.Null = exports.Set = exports.Sequence = exports.Boolean = exports.EndOfContent = exports.Constructed = exports.Primitive = exports.BaseBlock = exports.ValueBlock = exports.HexBlock = void 0;
-
-
-
-/* eslint-disable indent */
-
-/*
- * Copyright (c) 2016-2018, Peculiar Ventures
- * All rights reserved.
- *
- * Author 2016-2018, Yury Strozhevsky <www.strozhevsky.com>.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its contributors
- *    may be used to endorse or promote products derived from this software without
- *    specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
- * OF SUCH DAMAGE.
- *
- */
-//**************************************************************************************
-//**************************************************************************************
-//region Declaration of global variables
-//**************************************************************************************
-const powers2 = [new Uint8Array([1])];
-const digitsString = "0123456789"; //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration for "LocalBaseBlock" class
-//**************************************************************************************
-
-/**
- * Class used as a base block for all remaining ASN.1 classes
- * @typedef LocalBaseBlock
- * @interface
- * @property {number} blockLength
- * @property {string} error
- * @property {Array.<string>} warnings
- * @property {ArrayBuffer} valueBeforeDecode
- */
-
-class LocalBaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalBaseBlock" class
-   * @param {Object} [parameters={}]
-   * @property {ArrayBuffer} [valueBeforeDecode]
-   */
-  constructor(parameters = {}) {
-    /**
-     * @type {number} blockLength
-     */
-    this.blockLength = (0, utils.getParametersValue)(parameters, "blockLength", 0);
-    /**
-     * @type {string} error
-     */
-
-    this.error = (0, utils.getParametersValue)(parameters, "error", "");
-    /**
-     * @type {Array.<string>} warnings
-     */
-
-    this.warnings = (0, utils.getParametersValue)(parameters, "warnings", []); //noinspection JSCheckFunctionSignatures
-
-    /**
-     * @type {ArrayBuffer} valueBeforeDecode
-     */
-
-    if ("valueBeforeDecode" in parameters) this.valueBeforeDecode = parameters.valueBeforeDecode.slice(0);else this.valueBeforeDecode = new ArrayBuffer(0);
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "baseBlock";
-  } //**********************************************************************************
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {{blockName: string, blockLength: number, error: string, warnings: Array.<string>, valueBeforeDecode: string}}
-   */
-
-
-  toJSON() {
-    return {
-      blockName: this.constructor.blockName(),
-      blockLength: this.blockLength,
-      error: this.error,
-      warnings: this.warnings,
-      valueBeforeDecode: (0, utils.bufferToHexCodes)(this.valueBeforeDecode, 0, this.valueBeforeDecode.byteLength)
-    };
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Description for "HexBlock" class
-//**************************************************************************************
-
-/**
- * Class used as a base block for all remaining ASN.1 classes
- * @extends LocalBaseBlock
- * @typedef HexBlock
- * @property {number} blockLength
- * @property {string} error
- * @property {Array.<string>} warnings
- * @property {ArrayBuffer} valueBeforeDecode
- * @property {boolean} isHexOnly
- * @property {ArrayBuffer} valueHex
- */
-//noinspection JSUnusedLocalSymbols
-
-
-const HexBlock = BaseClass => class LocalHexBlockMixin extends BaseClass {
-  //**********************************************************************************
-  //noinspection JSUnusedGlobalSymbols
-
-  /**
-   * Constructor for "HexBlock" class
-   * @param {Object} [parameters={}]
-   * @property {ArrayBuffer} [valueHex]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    /**
-     * @type {boolean}
-     */
-
-    this.isHexOnly = (0, utils.getParametersValue)(parameters, "isHexOnly", false);
-    /**
-     * @type {ArrayBuffer}
-     */
-
-    if ("valueHex" in parameters) this.valueHex = parameters.valueHex.slice(0);else this.valueHex = new ArrayBuffer(0);
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "hexBlock";
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    //region Basic check for parameters
-    //noinspection JSCheckFunctionSignatures
-    if ((0, utils.checkBufferParams)(this, inputBuffer, inputOffset, inputLength) === false) return -1; //endregion
-    //region Getting Uint8Array from ArrayBuffer
-
-    const intBuffer = new Uint8Array(inputBuffer, inputOffset, inputLength); //endregion
-    //region Initial checks
-
-    if (intBuffer.length === 0) {
-      this.warnings.push("Zero buffer length");
-      return inputOffset;
-    } //endregion
-    //region Copy input buffer to internal buffer
-
-
-    this.valueHex = inputBuffer.slice(inputOffset, inputOffset + inputLength); //endregion
-
-    this.blockLength = inputLength;
-    return inputOffset + inputLength;
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    if (this.isHexOnly !== true) {
-      this.error = "Flag \"isHexOnly\" is not set, abort";
-      return new ArrayBuffer(0);
-    }
-
-    if (sizeOnly === true) return new ArrayBuffer(this.valueHex.byteLength); //noinspection JSCheckFunctionSignatures
-
-    return this.valueHex.slice(0);
-  } //**********************************************************************************
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {Object}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.blockName = this.constructor.blockName();
-    object.isHexOnly = this.isHexOnly;
-    object.valueHex = (0, utils.bufferToHexCodes)(this.valueHex, 0, this.valueHex.byteLength);
-    return object;
-  } //**********************************************************************************
-
-
-}; //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of identification block class
-//**************************************************************************************
-
-
-exports.HexBlock = HexBlock;
-
-class LocalIdentificationBlock extends HexBlock(LocalBaseBlock) {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalBaseBlock" class
-   * @param {Object} [parameters={}]
-   * @property {Object} [idBlock]
-   */
-  constructor(parameters = {}) {
-    super();
-
-    if ("idBlock" in parameters) {
-      //region Properties from hexBlock class
-      this.isHexOnly = (0, utils.getParametersValue)(parameters.idBlock, "isHexOnly", false);
-      this.valueHex = (0, utils.getParametersValue)(parameters.idBlock, "valueHex", new ArrayBuffer(0)); //endregion
-
-      this.tagClass = (0, utils.getParametersValue)(parameters.idBlock, "tagClass", -1);
-      this.tagNumber = (0, utils.getParametersValue)(parameters.idBlock, "tagNumber", -1);
-      this.isConstructed = (0, utils.getParametersValue)(parameters.idBlock, "isConstructed", false);
-    } else {
-      this.tagClass = -1;
-      this.tagNumber = -1;
-      this.isConstructed = false;
-    }
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "identificationBlock";
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    //region Initial variables
-    let firstOctet = 0;
-    let retBuf;
-    let retView; //endregion
-
-    switch (this.tagClass) {
-      case 1:
-        firstOctet |= 0x00; // UNIVERSAL
-
-        break;
-
-      case 2:
-        firstOctet |= 0x40; // APPLICATION
-
-        break;
-
-      case 3:
-        firstOctet |= 0x80; // CONTEXT-SPECIFIC
-
-        break;
-
-      case 4:
-        firstOctet |= 0xC0; // PRIVATE
-
-        break;
-
-      default:
-        this.error = "Unknown tag class";
-        return new ArrayBuffer(0);
-    }
-
-    if (this.isConstructed) firstOctet |= 0x20;
-
-    if (this.tagNumber < 31 && !this.isHexOnly) {
-      retBuf = new ArrayBuffer(1);
-      retView = new Uint8Array(retBuf);
-
-      if (!sizeOnly) {
-        let number = this.tagNumber;
-        number &= 0x1F;
-        firstOctet |= number;
-        retView[0] = firstOctet;
-      }
-
-      return retBuf;
-    }
-
-    if (this.isHexOnly === false) {
-      const encodedBuf = (0, utils.utilToBase)(this.tagNumber, 7);
-      const encodedView = new Uint8Array(encodedBuf);
-      const size = encodedBuf.byteLength;
-      retBuf = new ArrayBuffer(size + 1);
-      retView = new Uint8Array(retBuf);
-      retView[0] = firstOctet | 0x1F;
-
-      if (!sizeOnly) {
-        for (let i = 0; i < size - 1; i++) retView[i + 1] = encodedView[i] | 0x80;
-
-        retView[size] = encodedView[size - 1];
-      }
-
-      return retBuf;
-    }
-
-    retBuf = new ArrayBuffer(this.valueHex.byteLength + 1);
-    retView = new Uint8Array(retBuf);
-    retView[0] = firstOctet | 0x1F;
-
-    if (sizeOnly === false) {
-      const curView = new Uint8Array(this.valueHex);
-
-      for (let i = 0; i < curView.length - 1; i++) retView[i + 1] = curView[i] | 0x80;
-
-      retView[this.valueHex.byteLength] = curView[curView.length - 1];
-    }
-
-    return retBuf;
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number}
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    //region Basic check for parameters
-    //noinspection JSCheckFunctionSignatures
-    if ((0, utils.checkBufferParams)(this, inputBuffer, inputOffset, inputLength) === false) return -1; //endregion
-    //region Getting Uint8Array from ArrayBuffer
-
-    const intBuffer = new Uint8Array(inputBuffer, inputOffset, inputLength); //endregion
-    //region Initial checks
-
-    if (intBuffer.length === 0) {
-      this.error = "Zero buffer length";
-      return -1;
-    } //endregion
-    //region Find tag class
-
-
-    const tagClassMask = intBuffer[0] & 0xC0;
-
-    switch (tagClassMask) {
-      case 0x00:
-        this.tagClass = 1; // UNIVERSAL
-
-        break;
-
-      case 0x40:
-        this.tagClass = 2; // APPLICATION
-
-        break;
-
-      case 0x80:
-        this.tagClass = 3; // CONTEXT-SPECIFIC
-
-        break;
-
-      case 0xC0:
-        this.tagClass = 4; // PRIVATE
-
-        break;
-
-      default:
-        this.error = "Unknown tag class";
-        return -1;
-    } //endregion
-    //region Find it's constructed or not
-
-
-    this.isConstructed = (intBuffer[0] & 0x20) === 0x20; //endregion
-    //region Find tag number
-
-    this.isHexOnly = false;
-    const tagNumberMask = intBuffer[0] & 0x1F; //region Simple case (tag number < 31)
-
-    if (tagNumberMask !== 0x1F) {
-      this.tagNumber = tagNumberMask;
-      this.blockLength = 1;
-    } //endregion
-    //region Tag number bigger or equal to 31
-    else {
-        let count = 1;
-        this.valueHex = new ArrayBuffer(255);
-        let tagNumberBufferMaxLength = 255;
-        let intTagNumberBuffer = new Uint8Array(this.valueHex); //noinspection JSBitwiseOperatorUsage
-
-        while (intBuffer[count] & 0x80) {
-          intTagNumberBuffer[count - 1] = intBuffer[count] & 0x7F;
-          count++;
-
-          if (count >= intBuffer.length) {
-            this.error = "End of input reached before message was fully decoded";
-            return -1;
-          } //region In case if tag number length is greater than 255 bytes (rare but possible case)
-
-
-          if (count === tagNumberBufferMaxLength) {
-            tagNumberBufferMaxLength += 255;
-            const tempBuffer = new ArrayBuffer(tagNumberBufferMaxLength);
-            const tempBufferView = new Uint8Array(tempBuffer);
-
-            for (let i = 0; i < intTagNumberBuffer.length; i++) tempBufferView[i] = intTagNumberBuffer[i];
-
-            this.valueHex = new ArrayBuffer(tagNumberBufferMaxLength);
-            intTagNumberBuffer = new Uint8Array(this.valueHex);
-          } //endregion
-
-        }
-
-        this.blockLength = count + 1;
-        intTagNumberBuffer[count - 1] = intBuffer[count] & 0x7F; // Write last byte to buffer
-        //region Cut buffer
-
-        const tempBuffer = new ArrayBuffer(count);
-        const tempBufferView = new Uint8Array(tempBuffer);
-
-        for (let i = 0; i < count; i++) tempBufferView[i] = intTagNumberBuffer[i];
-
-        this.valueHex = new ArrayBuffer(count);
-        intTagNumberBuffer = new Uint8Array(this.valueHex);
-        intTagNumberBuffer.set(tempBufferView); //endregion
-        //region Try to convert long tag number to short form
-
-        if (this.blockLength <= 9) this.tagNumber = (0, utils.utilFromBase)(intTagNumberBuffer, 7);else {
-          this.isHexOnly = true;
-          this.warnings.push("Tag too long, represented as hex-coded");
-        } //endregion
-      } //endregion
-    //endregion
-    //region Check if constructed encoding was using for primitive type
-
-
-    if (this.tagClass === 1 && this.isConstructed) {
-      switch (this.tagNumber) {
-        case 1: // Boolean
-
-        case 2: // REAL
-
-        case 5: // Null
-
-        case 6: // OBJECT IDENTIFIER
-
-        case 9: // REAL
-
-        case 13: // RELATIVE OBJECT IDENTIFIER
-
-        case 14: // Time
-
-        case 23:
-        case 24:
-        case 31:
-        case 32:
-        case 33:
-        case 34:
-          this.error = "Constructed encoding used for primitive type";
-          return -1;
-      }
-    } //endregion
-
-
-    return inputOffset + this.blockLength; // Return current offset in input buffer
-  } //**********************************************************************************
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {{blockName: string,
-   *  tagClass: number,
-   *  tagNumber: number,
-   *  isConstructed: boolean,
-   *  isHexOnly: boolean,
-   *  valueHex: ArrayBuffer,
-   *  blockLength: number,
-   *  error: string, warnings: Array.<string>,
-   *  valueBeforeDecode: string}}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.blockName = this.constructor.blockName();
-    object.tagClass = this.tagClass;
-    object.tagNumber = this.tagNumber;
-    object.isConstructed = this.isConstructed;
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of length block class
-//**************************************************************************************
-
-
-class LocalLengthBlock extends LocalBaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalLengthBlock" class
-   * @param {Object} [parameters={}]
-   * @property {Object} [lenBlock]
-   */
-  constructor(parameters = {}) {
-    super();
-
-    if ("lenBlock" in parameters) {
-      this.isIndefiniteForm = (0, utils.getParametersValue)(parameters.lenBlock, "isIndefiniteForm", false);
-      this.longFormUsed = (0, utils.getParametersValue)(parameters.lenBlock, "longFormUsed", false);
-      this.length = (0, utils.getParametersValue)(parameters.lenBlock, "length", 0);
-    } else {
-      this.isIndefiniteForm = false;
-      this.longFormUsed = false;
-      this.length = 0;
-    }
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "lengthBlock";
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number}
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    //region Basic check for parameters
-    //noinspection JSCheckFunctionSignatures
-    if ((0, utils.checkBufferParams)(this, inputBuffer, inputOffset, inputLength) === false) return -1; //endregion
-    //region Getting Uint8Array from ArrayBuffer
-
-    const intBuffer = new Uint8Array(inputBuffer, inputOffset, inputLength); //endregion
-    //region Initial checks
-
-    if (intBuffer.length === 0) {
-      this.error = "Zero buffer length";
-      return -1;
-    }
-
-    if (intBuffer[0] === 0xFF) {
-      this.error = "Length block 0xFF is reserved by standard";
-      return -1;
-    } //endregion
-    //region Check for length form type
-
-
-    this.isIndefiniteForm = intBuffer[0] === 0x80; //endregion
-    //region Stop working in case of indefinite length form
-
-    if (this.isIndefiniteForm === true) {
-      this.blockLength = 1;
-      return inputOffset + this.blockLength;
-    } //endregion
-    //region Check is long form of length encoding using
-
-
-    this.longFormUsed = !!(intBuffer[0] & 0x80); //endregion
-    //region Stop working in case of short form of length value
-
-    if (this.longFormUsed === false) {
-      this.length = intBuffer[0];
-      this.blockLength = 1;
-      return inputOffset + this.blockLength;
-    } //endregion
-    //region Calculate length value in case of long form
-
-
-    const count = intBuffer[0] & 0x7F;
-
-    if (count > 8) // Too big length value
-      {
-        this.error = "Too big integer";
-        return -1;
-      }
-
-    if (count + 1 > intBuffer.length) {
-      this.error = "End of input reached before message was fully decoded";
-      return -1;
-    }
-
-    const lengthBufferView = new Uint8Array(count);
-
-    for (let i = 0; i < count; i++) lengthBufferView[i] = intBuffer[i + 1];
-
-    if (lengthBufferView[count - 1] === 0x00) this.warnings.push("Needlessly long encoded length");
-    this.length = (0, utils.utilFromBase)(lengthBufferView, 8);
-    if (this.longFormUsed && this.length <= 127) this.warnings.push("Unneccesary usage of long length form");
-    this.blockLength = count + 1; //endregion
-
-    return inputOffset + this.blockLength; // Return current offset in input buffer
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    //region Initial variables
-    let retBuf;
-    let retView; //endregion
-
-    if (this.length > 127) this.longFormUsed = true;
-
-    if (this.isIndefiniteForm) {
-      retBuf = new ArrayBuffer(1);
-
-      if (sizeOnly === false) {
-        retView = new Uint8Array(retBuf);
-        retView[0] = 0x80;
-      }
-
-      return retBuf;
-    }
-
-    if (this.longFormUsed === true) {
-      const encodedBuf = (0, utils.utilToBase)(this.length, 8);
-
-      if (encodedBuf.byteLength > 127) {
-        this.error = "Too big length";
-        return new ArrayBuffer(0);
-      }
-
-      retBuf = new ArrayBuffer(encodedBuf.byteLength + 1);
-      if (sizeOnly === true) return retBuf;
-      const encodedView = new Uint8Array(encodedBuf);
-      retView = new Uint8Array(retBuf);
-      retView[0] = encodedBuf.byteLength | 0x80;
-
-      for (let i = 0; i < encodedBuf.byteLength; i++) retView[i + 1] = encodedView[i];
-
-      return retBuf;
-    }
-
-    retBuf = new ArrayBuffer(1);
-
-    if (sizeOnly === false) {
-      retView = new Uint8Array(retBuf);
-      retView[0] = this.length;
-    }
-
-    return retBuf;
-  } //**********************************************************************************
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {{blockName, blockLength, error, warnings, valueBeforeDecode}|{blockName: string, blockLength: number, error: string, warnings: Array.<string>, valueBeforeDecode: string}}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.blockName = this.constructor.blockName();
-    object.isIndefiniteForm = this.isIndefiniteForm;
-    object.longFormUsed = this.longFormUsed;
-    object.length = this.length;
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of value block class
-//**************************************************************************************
-
-
-class ValueBlock extends LocalBaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "ValueBlock" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "valueBlock";
-  } //**********************************************************************************
-  //noinspection JSUnusedLocalSymbols,JSUnusedLocalSymbols,JSUnusedLocalSymbols
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number}
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    //region Throw an exception for a function which needs to be specified in extended classes
-    throw TypeError("User need to make a specific function in a class which extends \"ValueBlock\""); //endregion
-  } //**********************************************************************************
-  //noinspection JSUnusedLocalSymbols
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    //region Throw an exception for a function which needs to be specified in extended classes
-    throw TypeError("User need to make a specific function in a class which extends \"ValueBlock\""); //endregion
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of basic ASN.1 block class
-//**************************************************************************************
-
-
-exports.ValueBlock = ValueBlock;
-
-class BaseBlock extends LocalBaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "BaseBlock" class
-   * @param {Object} [parameters={}]
-   * @property {Object} [primitiveSchema]
-   * @property {string} [name]
-   * @property {boolean} [optional]
-   * @param valueBlockType Type of value block
-   */
-  constructor(parameters = {}, valueBlockType = ValueBlock) {
-    super(parameters);
-    if ("name" in parameters) this.name = parameters.name;
-    if ("optional" in parameters) this.optional = parameters.optional;
-    if ("primitiveSchema" in parameters) this.primitiveSchema = parameters.primitiveSchema;
-    this.idBlock = new LocalIdentificationBlock(parameters);
-    this.lenBlock = new LocalLengthBlock(parameters);
-    this.valueBlock = new valueBlockType(parameters);
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "BaseBlock";
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number}
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    const resultOffset = this.valueBlock.fromBER(inputBuffer, inputOffset, this.lenBlock.isIndefiniteForm === true ? inputLength : this.lenBlock.length);
-
-    if (resultOffset === -1) {
-      this.error = this.valueBlock.error;
-      return resultOffset;
-    }
-
-    if (this.idBlock.error.length === 0) this.blockLength += this.idBlock.blockLength;
-    if (this.lenBlock.error.length === 0) this.blockLength += this.lenBlock.blockLength;
-    if (this.valueBlock.error.length === 0) this.blockLength += this.valueBlock.blockLength;
-    return resultOffset;
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    let retBuf;
-    const idBlockBuf = this.idBlock.toBER(sizeOnly);
-    const valueBlockSizeBuf = this.valueBlock.toBER(true);
-    this.lenBlock.length = valueBlockSizeBuf.byteLength;
-    const lenBlockBuf = this.lenBlock.toBER(sizeOnly);
-    retBuf = (0, utils.utilConcatBuf)(idBlockBuf, lenBlockBuf);
-    let valueBlockBuf;
-    if (sizeOnly === false) valueBlockBuf = this.valueBlock.toBER(sizeOnly);else valueBlockBuf = new ArrayBuffer(this.lenBlock.length);
-    retBuf = (0, utils.utilConcatBuf)(retBuf, valueBlockBuf);
-
-    if (this.lenBlock.isIndefiniteForm === true) {
-      const indefBuf = new ArrayBuffer(2);
-
-      if (sizeOnly === false) {
-        const indefView = new Uint8Array(indefBuf);
-        indefView[0] = 0x00;
-        indefView[1] = 0x00;
-      }
-
-      retBuf = (0, utils.utilConcatBuf)(retBuf, indefBuf);
-    }
-
-    return retBuf;
-  } //**********************************************************************************
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {{blockName, blockLength, error, warnings, valueBeforeDecode}|{blockName: string, blockLength: number, error: string, warnings: Array.<string>, valueBeforeDecode: string}}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.idBlock = this.idBlock.toJSON();
-    object.lenBlock = this.lenBlock.toJSON();
-    object.valueBlock = this.valueBlock.toJSON();
-    if ("name" in this) object.name = this.name;
-    if ("optional" in this) object.optional = this.optional;
-    if ("primitiveSchema" in this) object.primitiveSchema = this.primitiveSchema.toJSON();
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of basic block for all PRIMITIVE types
-//**************************************************************************************
-
-
-exports.BaseBlock = BaseBlock;
-
-class LocalPrimitiveValueBlock extends ValueBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalPrimitiveValueBlock" class
-   * @param {Object} [parameters={}]
-   * @property {ArrayBuffer} [valueBeforeDecode]
-   */
-  constructor(parameters = {}) {
-    super(parameters); //region Variables from "hexBlock" class
-
-    if ("valueHex" in parameters) this.valueHex = parameters.valueHex.slice(0);else this.valueHex = new ArrayBuffer(0);
-    this.isHexOnly = (0, utils.getParametersValue)(parameters, "isHexOnly", true); //endregion
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number}
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    //region Basic check for parameters
-    //noinspection JSCheckFunctionSignatures
-    if ((0, utils.checkBufferParams)(this, inputBuffer, inputOffset, inputLength) === false) return -1; //endregion
-    //region Getting Uint8Array from ArrayBuffer
-
-    const intBuffer = new Uint8Array(inputBuffer, inputOffset, inputLength); //endregion
-    //region Initial checks
-
-    if (intBuffer.length === 0) {
-      this.warnings.push("Zero buffer length");
-      return inputOffset;
-    } //endregion
-    //region Copy input buffer into internal buffer
-
-
-    this.valueHex = new ArrayBuffer(intBuffer.length);
-    const valueHexView = new Uint8Array(this.valueHex);
-
-    for (let i = 0; i < intBuffer.length; i++) valueHexView[i] = intBuffer[i]; //endregion
-
-
-    this.blockLength = inputLength;
-    return inputOffset + inputLength;
-  } //**********************************************************************************
-  //noinspection JSUnusedLocalSymbols
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    return this.valueHex.slice(0);
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "PrimitiveValueBlock";
-  } //**********************************************************************************
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {{blockName, blockLength, error, warnings, valueBeforeDecode}|{blockName: string, blockLength: number, error: string, warnings: Array.<string>, valueBeforeDecode: string}}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.valueHex = (0, utils.bufferToHexCodes)(this.valueHex, 0, this.valueHex.byteLength);
-    object.isHexOnly = this.isHexOnly;
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-
-class Primitive extends BaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Primitive" class
-   * @param {Object} [parameters={}]
-   * @property {ArrayBuffer} [valueHex]
-   */
-  constructor(parameters = {}) {
-    super(parameters, LocalPrimitiveValueBlock);
-    this.idBlock.isConstructed = false;
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "PRIMITIVE";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of basic block for all CONSTRUCTED types
-//**************************************************************************************
-
-
-exports.Primitive = Primitive;
-
-class LocalConstructedValueBlock extends ValueBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalConstructedValueBlock" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.value = (0, utils.getParametersValue)(parameters, "value", []);
-    this.isIndefiniteForm = (0, utils.getParametersValue)(parameters, "isIndefiniteForm", false);
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number}
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    //region Store initial offset and length
-    const initialOffset = inputOffset;
-    const initialLength = inputLength; //endregion
-    //region Basic check for parameters
-    //noinspection JSCheckFunctionSignatures
-
-    if ((0, utils.checkBufferParams)(this, inputBuffer, inputOffset, inputLength) === false) return -1; //endregion
-    //region Getting Uint8Array from ArrayBuffer
-
-    const intBuffer = new Uint8Array(inputBuffer, inputOffset, inputLength); //endregion
-    //region Initial checks
-
-    if (intBuffer.length === 0) {
-      this.warnings.push("Zero buffer length");
-      return inputOffset;
-    } //endregion
-    //region Aux function
-
-
-    function checkLen(indefiniteLength, length) {
-      if (indefiniteLength === true) return 1;
-      return length;
-    } //endregion
-
-
-    let currentOffset = inputOffset;
-
-    while (checkLen(this.isIndefiniteForm, inputLength) > 0) {
-      const returnObject = LocalFromBER(inputBuffer, currentOffset, inputLength);
-
-      if (returnObject.offset === -1) {
-        this.error = returnObject.result.error;
-        this.warnings.concat(returnObject.result.warnings);
-        return -1;
-      }
-
-      currentOffset = returnObject.offset;
-      this.blockLength += returnObject.result.blockLength;
-      inputLength -= returnObject.result.blockLength;
-      this.value.push(returnObject.result);
-      if (this.isIndefiniteForm === true && returnObject.result.constructor.blockName() === EndOfContent.blockName()) break;
-    }
-
-    if (this.isIndefiniteForm === true) {
-      if (this.value[this.value.length - 1].constructor.blockName() === EndOfContent.blockName()) this.value.pop();else this.warnings.push("No EndOfContent block encoded");
-    } //region Copy "inputBuffer" to "valueBeforeDecode"
-
-
-    this.valueBeforeDecode = inputBuffer.slice(initialOffset, initialOffset + initialLength); //endregion
-
-    return currentOffset;
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    let retBuf = new ArrayBuffer(0);
-
-    for (let i = 0; i < this.value.length; i++) {
-      const valueBuf = this.value[i].toBER(sizeOnly);
-      retBuf = (0, utils.utilConcatBuf)(retBuf, valueBuf);
-    }
-
-    return retBuf;
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "ConstructedValueBlock";
-  } //**********************************************************************************
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {{blockName, blockLength, error, warnings, valueBeforeDecode}|{blockName: string, blockLength: number, error: string, warnings: Array.<string>, valueBeforeDecode: string}}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.isIndefiniteForm = this.isIndefiniteForm;
-    object.value = [];
-
-    for (let i = 0; i < this.value.length; i++) object.value.push(this.value[i].toJSON());
-
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-
-class Constructed extends BaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Constructed" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters, LocalConstructedValueBlock);
-    this.idBlock.isConstructed = true;
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "CONSTRUCTED";
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number}
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    this.valueBlock.isIndefiniteForm = this.lenBlock.isIndefiniteForm;
-    const resultOffset = this.valueBlock.fromBER(inputBuffer, inputOffset, this.lenBlock.isIndefiniteForm === true ? inputLength : this.lenBlock.length);
-
-    if (resultOffset === -1) {
-      this.error = this.valueBlock.error;
-      return resultOffset;
-    }
-
-    if (this.idBlock.error.length === 0) this.blockLength += this.idBlock.blockLength;
-    if (this.lenBlock.error.length === 0) this.blockLength += this.lenBlock.blockLength;
-    if (this.valueBlock.error.length === 0) this.blockLength += this.valueBlock.blockLength;
-    return resultOffset;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of ASN.1 EndOfContent type class
-//**************************************************************************************
-
-
-exports.Constructed = Constructed;
-
-class LocalEndOfContentValueBlock extends ValueBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalEndOfContentValueBlock" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-  } //**********************************************************************************
-  //noinspection JSUnusedLocalSymbols,JSUnusedLocalSymbols
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number}
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    //region There is no "value block" for EndOfContent type and we need to return the same offset
-    return inputOffset; //endregion
-  } //**********************************************************************************
-  //noinspection JSUnusedLocalSymbols
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    return new ArrayBuffer(0);
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "EndOfContentValueBlock";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-
-class EndOfContent extends BaseBlock {
-  //**********************************************************************************
-  constructor(paramaters = {}) {
-    super(paramaters, LocalEndOfContentValueBlock);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 0; // EndOfContent
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "EndOfContent";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of ASN.1 Boolean type class
-//**************************************************************************************
-
-
-exports.EndOfContent = EndOfContent;
-
-class LocalBooleanValueBlock extends ValueBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalBooleanValueBlock" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.value = (0, utils.getParametersValue)(parameters, "value", false);
-    this.isHexOnly = (0, utils.getParametersValue)(parameters, "isHexOnly", false);
-    if ("valueHex" in parameters) this.valueHex = parameters.valueHex.slice(0);else {
-      this.valueHex = new ArrayBuffer(1);
-
-      if (this.value === true) {
-        const view = new Uint8Array(this.valueHex);
-        view[0] = 0xFF;
-      }
-    }
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    //region Basic check for parameters
-    //noinspection JSCheckFunctionSignatures
-    if ((0, utils.checkBufferParams)(this, inputBuffer, inputOffset, inputLength) === false) return -1; //endregion
-    //region Getting Uint8Array from ArrayBuffer
-
-    const intBuffer = new Uint8Array(inputBuffer, inputOffset, inputLength); //endregion
-
-    if (inputLength > 1) this.warnings.push("Boolean value encoded in more then 1 octet");
-    this.isHexOnly = true; //region Copy input buffer to internal array
-
-    this.valueHex = new ArrayBuffer(intBuffer.length);
-    const view = new Uint8Array(this.valueHex);
-
-    for (let i = 0; i < intBuffer.length; i++) view[i] = intBuffer[i]; //endregion
-
-
-    if (utils.utilDecodeTC.call(this) !== 0) this.value = true;else this.value = false;
-    this.blockLength = inputLength;
-    return inputOffset + inputLength;
-  } //**********************************************************************************
-  //noinspection JSUnusedLocalSymbols
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    return this.valueHex;
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "BooleanValueBlock";
-  } //**********************************************************************************
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {{blockName, blockLength, error, warnings, valueBeforeDecode}|{blockName: string, blockLength: number, error: string, warnings: Array.<string>, valueBeforeDecode: string}}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.value = this.value;
-    object.isHexOnly = this.isHexOnly;
-    object.valueHex = (0, utils.bufferToHexCodes)(this.valueHex, 0, this.valueHex.byteLength);
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-
-class Boolean extends BaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Boolean" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters, LocalBooleanValueBlock);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 1; // Boolean
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "Boolean";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of ASN.1 Sequence and Set type classes
-//**************************************************************************************
-
-
-exports.Boolean = Boolean;
-
-class Sequence extends Constructed {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Sequence" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 16; // Sequence
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "Sequence";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-
-exports.Sequence = Sequence;
-
-class Set extends Constructed {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Set" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 17; // Set
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "Set";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of ASN.1 Null type class
-//**************************************************************************************
-
-
-exports.Set = Set;
-
-class Null extends BaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Null" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters, LocalBaseBlock); // We will not have a call to "Null value block" because of specified "fromBER" and "toBER" functions
-
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 5; // Null
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "Null";
-  } //**********************************************************************************
-  //noinspection JSUnusedLocalSymbols
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    if (this.lenBlock.length > 0) this.warnings.push("Non-zero length of value block for Null type");
-    if (this.idBlock.error.length === 0) this.blockLength += this.idBlock.blockLength;
-    if (this.lenBlock.error.length === 0) this.blockLength += this.lenBlock.blockLength;
-    this.blockLength += inputLength;
-
-    if (inputOffset + inputLength > inputBuffer.byteLength) {
-      this.error = "End of input reached before message was fully decoded (inconsistent offset and length values)";
-      return -1;
-    }
-
-    return inputOffset + inputLength;
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    const retBuf = new ArrayBuffer(2);
-    if (sizeOnly === true) return retBuf;
-    const retView = new Uint8Array(retBuf);
-    retView[0] = 0x05;
-    retView[1] = 0x00;
-    return retBuf;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of ASN.1 OctetString type class
-//**************************************************************************************
-
-
-exports.Null = Null;
-
-class LocalOctetStringValueBlock extends HexBlock(LocalConstructedValueBlock) {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalOctetStringValueBlock" class
-   * @param {Object} [parameters={}]
-   * @property {ArrayBuffer} [valueHex]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.isConstructed = (0, utils.getParametersValue)(parameters, "isConstructed", false);
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    let resultOffset = 0;
-
-    if (this.isConstructed === true) {
-      this.isHexOnly = false;
-      resultOffset = LocalConstructedValueBlock.prototype.fromBER.call(this, inputBuffer, inputOffset, inputLength);
-      if (resultOffset === -1) return resultOffset;
-
-      for (let i = 0; i < this.value.length; i++) {
-        const currentBlockName = this.value[i].constructor.blockName();
-
-        if (currentBlockName === EndOfContent.blockName()) {
-          if (this.isIndefiniteForm === true) break;else {
-            this.error = "EndOfContent is unexpected, OCTET STRING may consists of OCTET STRINGs only";
-            return -1;
-          }
-        }
-
-        if (currentBlockName !== OctetString.blockName()) {
-          this.error = "OCTET STRING may consists of OCTET STRINGs only";
-          return -1;
-        }
-      }
-    } else {
-      this.isHexOnly = true;
-      resultOffset = super.fromBER(inputBuffer, inputOffset, inputLength);
-      this.blockLength = inputLength;
-    }
-
-    return resultOffset;
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    if (this.isConstructed === true) return LocalConstructedValueBlock.prototype.toBER.call(this, sizeOnly);
-    let retBuf = new ArrayBuffer(this.valueHex.byteLength);
-    if (sizeOnly === true) return retBuf;
-    if (this.valueHex.byteLength === 0) return retBuf;
-    retBuf = this.valueHex.slice(0);
-    return retBuf;
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "OctetStringValueBlock";
-  } //**********************************************************************************
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.isConstructed = this.isConstructed;
-    object.isHexOnly = this.isHexOnly;
-    object.valueHex = (0, utils.bufferToHexCodes)(this.valueHex, 0, this.valueHex.byteLength);
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-
-class OctetString extends BaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "OctetString" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters, LocalOctetStringValueBlock);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 4; // OctetString
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    this.valueBlock.isConstructed = this.idBlock.isConstructed;
-    this.valueBlock.isIndefiniteForm = this.lenBlock.isIndefiniteForm; //region Ability to encode empty OCTET STRING
-
-    if (inputLength === 0) {
-      if (this.idBlock.error.length === 0) this.blockLength += this.idBlock.blockLength;
-      if (this.lenBlock.error.length === 0) this.blockLength += this.lenBlock.blockLength;
-      return inputOffset;
-    } //endregion
-
-
-    return super.fromBER(inputBuffer, inputOffset, inputLength);
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "OctetString";
-  } //**********************************************************************************
-  //noinspection JSUnusedGlobalSymbols
-
-  /**
-   * Checking that two OCTETSTRINGs are equal
-   * @param {OctetString} octetString
-   */
-
-
-  isEqual(octetString) {
-    //region Check input type
-    if (octetString instanceof OctetString === false) return false; //endregion
-    //region Compare two JSON strings
-
-    if (JSON.stringify(this) !== JSON.stringify(octetString)) return false; //endregion
-
-    return true;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of ASN.1 BitString type class
-//**************************************************************************************
-
-
-exports.OctetString = OctetString;
-
-class LocalBitStringValueBlock extends HexBlock(LocalConstructedValueBlock) {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalBitStringValueBlock" class
-   * @param {Object} [parameters={}]
-   * @property {ArrayBuffer} [valueHex]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.unusedBits = (0, utils.getParametersValue)(parameters, "unusedBits", 0);
-    this.isConstructed = (0, utils.getParametersValue)(parameters, "isConstructed", false);
-    this.blockLength = this.valueHex.byteLength;
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    //region Ability to decode zero-length BitString value
-    if (inputLength === 0) return inputOffset; //endregion
-
-    let resultOffset = -1; //region If the BISTRING supposed to be a constructed value
-
-    if (this.isConstructed === true) {
-      resultOffset = LocalConstructedValueBlock.prototype.fromBER.call(this, inputBuffer, inputOffset, inputLength);
-      if (resultOffset === -1) return resultOffset;
-
-      for (let i = 0; i < this.value.length; i++) {
-        const currentBlockName = this.value[i].constructor.blockName();
-
-        if (currentBlockName === EndOfContent.blockName()) {
-          if (this.isIndefiniteForm === true) break;else {
-            this.error = "EndOfContent is unexpected, BIT STRING may consists of BIT STRINGs only";
-            return -1;
-          }
-        }
-
-        if (currentBlockName !== BitString.blockName()) {
-          this.error = "BIT STRING may consists of BIT STRINGs only";
-          return -1;
-        }
-
-        if (this.unusedBits > 0 && this.value[i].valueBlock.unusedBits > 0) {
-          this.error = "Usign of \"unused bits\" inside constructive BIT STRING allowed for least one only";
-          return -1;
-        }
-
-        this.unusedBits = this.value[i].valueBlock.unusedBits;
-
-        if (this.unusedBits > 7) {
-          this.error = "Unused bits for BitString must be in range 0-7";
-          return -1;
-        }
-      }
-
-      return resultOffset;
-    } //endregion
-    //region If the BitString supposed to be a primitive value
-    //region Basic check for parameters
-    //noinspection JSCheckFunctionSignatures
-
-
-    if ((0, utils.checkBufferParams)(this, inputBuffer, inputOffset, inputLength) === false) return -1; //endregion
-
-    const intBuffer = new Uint8Array(inputBuffer, inputOffset, inputLength);
-    this.unusedBits = intBuffer[0];
-
-    if (this.unusedBits > 7) {
-      this.error = "Unused bits for BitString must be in range 0-7";
-      return -1;
-    } //region Copy input buffer to internal buffer
-
-
-    this.valueHex = new ArrayBuffer(intBuffer.length - 1);
-    const view = new Uint8Array(this.valueHex);
-
-    for (let i = 0; i < inputLength - 1; i++) view[i] = intBuffer[i + 1]; //endregion
-
-
-    this.blockLength = intBuffer.length;
-    return inputOffset + inputLength; //endregion
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    if (this.isConstructed === true) return LocalConstructedValueBlock.prototype.toBER.call(this, sizeOnly);
-    if (sizeOnly === true) return new ArrayBuffer(this.valueHex.byteLength + 1);
-    if (this.valueHex.byteLength === 0) return new ArrayBuffer(0);
-    const curView = new Uint8Array(this.valueHex);
-    const retBuf = new ArrayBuffer(this.valueHex.byteLength + 1);
-    const retView = new Uint8Array(retBuf);
-    retView[0] = this.unusedBits;
-
-    for (let i = 0; i < this.valueHex.byteLength; i++) retView[i + 1] = curView[i];
-
-    return retBuf;
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "BitStringValueBlock";
-  } //**********************************************************************************
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {{blockName, blockLength, error, warnings, valueBeforeDecode}|{blockName: string, blockLength: number, error: string, warnings: Array.<string>, valueBeforeDecode: string}}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.unusedBits = this.unusedBits;
-    object.isConstructed = this.isConstructed;
-    object.isHexOnly = this.isHexOnly;
-    object.valueHex = (0, utils.bufferToHexCodes)(this.valueHex, 0, this.valueHex.byteLength);
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-
-class BitString extends BaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "BitString" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters, LocalBitStringValueBlock);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 3; // BitString
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "BitString";
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    //region Ability to encode empty BitString
-    if (inputLength === 0) return inputOffset; //endregion
-
-    this.valueBlock.isConstructed = this.idBlock.isConstructed;
-    this.valueBlock.isIndefiniteForm = this.lenBlock.isIndefiniteForm;
-    return super.fromBER(inputBuffer, inputOffset, inputLength);
-  } //**********************************************************************************
-
-  /**
-   * Checking that two BITSTRINGs are equal
-   * @param {BitString} bitString
-   */
-
-
-  isEqual(bitString) {
-    //region Check input type
-    if (bitString instanceof BitString === false) return false; //endregion
-    //region Compare two JSON strings
-
-    if (JSON.stringify(this) !== JSON.stringify(bitString)) return false; //endregion
-
-    return true;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of ASN.1 Integer type class
-//**************************************************************************************
-
-/**
- * @extends ValueBlock
- */
-
-
-exports.BitString = BitString;
-
-class LocalIntegerValueBlock extends HexBlock(ValueBlock) {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalIntegerValueBlock" class
-   * @param {Object} [parameters={}]
-   * @property {ArrayBuffer} [valueHex]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    if ("value" in parameters) this.valueDec = parameters.value;
-  } //**********************************************************************************
-
-  /**
-   * Setter for "valueHex"
-   * @param {ArrayBuffer} _value
-   */
-
-
-  set valueHex(_value) {
-    this._valueHex = _value.slice(0);
-
-    if (_value.byteLength >= 4) {
-      this.warnings.push("Too big Integer for decoding, hex only");
-      this.isHexOnly = true;
-      this._valueDec = 0;
-    } else {
-      this.isHexOnly = false;
-      if (_value.byteLength > 0) this._valueDec = utils.utilDecodeTC.call(this);
-    }
-  } //**********************************************************************************
-
-  /**
-   * Getter for "valueHex"
-   * @returns {ArrayBuffer}
-   */
-
-
-  get valueHex() {
-    return this._valueHex;
-  } //**********************************************************************************
-
-  /**
-   * Getter for "valueDec"
-   * @param {number} _value
-   */
-
-
-  set valueDec(_value) {
-    this._valueDec = _value;
-    this.isHexOnly = false;
-    this._valueHex = (0, utils.utilEncodeTC)(_value);
-  } //**********************************************************************************
-
-  /**
-   * Getter for "valueDec"
-   * @returns {number}
-   */
-
-
-  get valueDec() {
-    return this._valueDec;
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from DER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 DER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 DER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @param {number} [expectedLength=0] Expected length of converted "valueHex" buffer
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromDER(inputBuffer, inputOffset, inputLength, expectedLength = 0) {
-    const offset = this.fromBER(inputBuffer, inputOffset, inputLength);
-    if (offset === -1) return offset;
-    const view = new Uint8Array(this._valueHex);
-
-    if (view[0] === 0x00 && (view[1] & 0x80) !== 0) {
-      const updatedValueHex = new ArrayBuffer(this._valueHex.byteLength - 1);
-      const updatedView = new Uint8Array(updatedValueHex);
-      updatedView.set(new Uint8Array(this._valueHex, 1, this._valueHex.byteLength - 1));
-      this._valueHex = updatedValueHex.slice(0);
-    } else {
-      if (expectedLength !== 0) {
-        if (this._valueHex.byteLength < expectedLength) {
-          if (expectedLength - this._valueHex.byteLength > 1) expectedLength = this._valueHex.byteLength + 1;
-          const updatedValueHex = new ArrayBuffer(expectedLength);
-          const updatedView = new Uint8Array(updatedValueHex);
-          updatedView.set(view, expectedLength - this._valueHex.byteLength);
-          this._valueHex = updatedValueHex.slice(0);
-        }
-      }
-    }
-
-    return offset;
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (DER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toDER(sizeOnly = false) {
-    const view = new Uint8Array(this._valueHex);
-
-    switch (true) {
-      case (view[0] & 0x80) !== 0:
-        {
-          const updatedValueHex = new ArrayBuffer(this._valueHex.byteLength + 1);
-          const updatedView = new Uint8Array(updatedValueHex);
-          updatedView[0] = 0x00;
-          updatedView.set(view, 1);
-          this._valueHex = updatedValueHex.slice(0);
-        }
-        break;
-
-      case view[0] === 0x00 && (view[1] & 0x80) === 0:
-        {
-          const updatedValueHex = new ArrayBuffer(this._valueHex.byteLength - 1);
-          const updatedView = new Uint8Array(updatedValueHex);
-          updatedView.set(new Uint8Array(this._valueHex, 1, this._valueHex.byteLength - 1));
-          this._valueHex = updatedValueHex.slice(0);
-        }
-        break;
-    }
-
-    return this.toBER(sizeOnly);
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    const resultOffset = super.fromBER(inputBuffer, inputOffset, inputLength);
-    if (resultOffset === -1) return resultOffset;
-    this.blockLength = inputLength;
-    return inputOffset + inputLength;
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    //noinspection JSCheckFunctionSignatures
-    return this.valueHex.slice(0);
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "IntegerValueBlock";
-  } //**********************************************************************************
-  //noinspection JSUnusedGlobalSymbols
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {Object}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.valueDec = this.valueDec;
-    return object;
-  } //**********************************************************************************
-
-  /**
-   * Convert current value to decimal string representation
-   */
-
-
-  toString() {
-    //region Aux functions
-    function viewAdd(first, second) {
-      //region Initial variables
-      const c = new Uint8Array([0]);
-      let firstView = new Uint8Array(first);
-      let secondView = new Uint8Array(second);
-      let firstViewCopy = firstView.slice(0);
-      const firstViewCopyLength = firstViewCopy.length - 1;
-      let secondViewCopy = secondView.slice(0);
-      const secondViewCopyLength = secondViewCopy.length - 1;
-      let value = 0;
-      const max = secondViewCopyLength < firstViewCopyLength ? firstViewCopyLength : secondViewCopyLength;
-      let counter = 0; //endregion
-
-      for (let i = max; i >= 0; i--, counter++) {
-        switch (true) {
-          case counter < secondViewCopy.length:
-            value = firstViewCopy[firstViewCopyLength - counter] + secondViewCopy[secondViewCopyLength - counter] + c[0];
-            break;
-
-          default:
-            value = firstViewCopy[firstViewCopyLength - counter] + c[0];
-        }
-
-        c[0] = value / 10;
-
-        switch (true) {
-          case counter >= firstViewCopy.length:
-            firstViewCopy = (0, utils.utilConcatView)(new Uint8Array([value % 10]), firstViewCopy);
-            break;
-
-          default:
-            firstViewCopy[firstViewCopyLength - counter] = value % 10;
-        }
-      }
-
-      if (c[0] > 0) firstViewCopy = (0, utils.utilConcatView)(c, firstViewCopy);
-      return firstViewCopy.slice(0);
-    }
-
-    function power2(n) {
-      if (n >= powers2.length) {
-        for (let p = powers2.length; p <= n; p++) {
-          const c = new Uint8Array([0]);
-          let digits = powers2[p - 1].slice(0);
-
-          for (let i = digits.length - 1; i >= 0; i--) {
-            const newValue = new Uint8Array([(digits[i] << 1) + c[0]]);
-            c[0] = newValue[0] / 10;
-            digits[i] = newValue[0] % 10;
-          }
-
-          if (c[0] > 0) digits = (0, utils.utilConcatView)(c, digits);
-          powers2.push(digits);
-        }
-      }
-
-      return powers2[n];
-    }
-
-    function viewSub(first, second) {
-      //region Initial variables
-      let b = 0;
-      let firstView = new Uint8Array(first);
-      let secondView = new Uint8Array(second);
-      let firstViewCopy = firstView.slice(0);
-      const firstViewCopyLength = firstViewCopy.length - 1;
-      let secondViewCopy = secondView.slice(0);
-      const secondViewCopyLength = secondViewCopy.length - 1;
-      let value;
-      let counter = 0; //endregion
-
-      for (let i = secondViewCopyLength; i >= 0; i--, counter++) {
-        value = firstViewCopy[firstViewCopyLength - counter] - secondViewCopy[secondViewCopyLength - counter] - b;
-
-        switch (true) {
-          case value < 0:
-            b = 1;
-            firstViewCopy[firstViewCopyLength - counter] = value + 10;
-            break;
-
-          default:
-            b = 0;
-            firstViewCopy[firstViewCopyLength - counter] = value;
-        }
-      }
-
-      if (b > 0) {
-        for (let i = firstViewCopyLength - secondViewCopyLength + 1; i >= 0; i--, counter++) {
-          value = firstViewCopy[firstViewCopyLength - counter] - b;
-
-          if (value < 0) {
-            b = 1;
-            firstViewCopy[firstViewCopyLength - counter] = value + 10;
-          } else {
-            b = 0;
-            firstViewCopy[firstViewCopyLength - counter] = value;
-            break;
-          }
-        }
-      }
-
-      return firstViewCopy.slice();
-    } //endregion
-    //region Initial variables
-
-
-    const firstBit = this._valueHex.byteLength * 8 - 1;
-    let digits = new Uint8Array(this._valueHex.byteLength * 8 / 3);
-    let bitNumber = 0;
-    let currentByte;
-    const asn1View = new Uint8Array(this._valueHex);
-    let result = "";
-    let flag = false; //endregion
-    //region Calculate number
-
-    for (let byteNumber = this._valueHex.byteLength - 1; byteNumber >= 0; byteNumber--) {
-      currentByte = asn1View[byteNumber];
-
-      for (let i = 0; i < 8; i++) {
-        if ((currentByte & 1) === 1) {
-          switch (bitNumber) {
-            case firstBit:
-              digits = viewSub(power2(bitNumber), digits);
-              result = "-";
-              break;
-
-            default:
-              digits = viewAdd(digits, power2(bitNumber));
-          }
-        }
-
-        bitNumber++;
-        currentByte >>= 1;
-      }
-    } //endregion
-    //region Print number
-
-
-    for (let i = 0; i < digits.length; i++) {
-      if (digits[i]) flag = true;
-      if (flag) result += digitsString.charAt(digits[i]);
-    }
-
-    if (flag === false) result += digitsString.charAt(0); //endregion
-
-    return result;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-
-class Integer extends BaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Integer" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters, LocalIntegerValueBlock);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 2; // Integer
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "Integer";
-  } //**********************************************************************************
-  //noinspection JSUnusedGlobalSymbols
-
-  /**
-   * Compare two Integer object, or Integer and ArrayBuffer objects
-   * @param {!Integer|ArrayBuffer} otherValue
-   * @returns {boolean}
-   */
-
-
-  isEqual(otherValue) {
-    if (otherValue instanceof Integer) {
-      if (this.valueBlock.isHexOnly && otherValue.valueBlock.isHexOnly) // Compare two ArrayBuffers
-        return (0, utils.isEqualBuffer)(this.valueBlock.valueHex, otherValue.valueBlock.valueHex);
-      if (this.valueBlock.isHexOnly === otherValue.valueBlock.isHexOnly) return this.valueBlock.valueDec === otherValue.valueBlock.valueDec;
-      return false;
-    }
-
-    if (otherValue instanceof ArrayBuffer) return (0, utils.isEqualBuffer)(this.valueBlock.valueHex, otherValue);
-    return false;
-  } //**********************************************************************************
-
-  /**
-   * Convert current Integer value from BER into DER format
-   * @returns {Integer}
-   */
-
-
-  convertToDER() {
-    const integer = new Integer({
-      valueHex: this.valueBlock.valueHex
-    });
-    integer.valueBlock.toDER();
-    return integer;
-  } //**********************************************************************************
-
-  /**
-   * Convert current Integer value from DER to BER format
-   * @returns {Integer}
-   */
-
-
-  convertFromDER() {
-    const expectedLength = this.valueBlock.valueHex.byteLength % 2 ? this.valueBlock.valueHex.byteLength + 1 : this.valueBlock.valueHex.byteLength;
-    const integer = new Integer({
-      valueHex: this.valueBlock.valueHex
-    });
-    integer.valueBlock.fromDER(integer.valueBlock.valueHex, 0, integer.valueBlock.valueHex.byteLength, expectedLength);
-    return integer;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of ASN.1 Enumerated type class
-//**************************************************************************************
-
-
-exports.Integer = Integer;
-
-class Enumerated extends Integer {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Enumerated" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 10; // Enumerated
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "Enumerated";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of ASN.1 ObjectIdentifier type class
-//**************************************************************************************
-
-
-exports.Enumerated = Enumerated;
-
-class LocalSidValueBlock extends HexBlock(LocalBaseBlock) {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalSidValueBlock" class
-   * @param {Object} [parameters={}]
-   * @property {number} [valueDec]
-   * @property {boolean} [isFirstSid]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.valueDec = (0, utils.getParametersValue)(parameters, "valueDec", -1);
-    this.isFirstSid = (0, utils.getParametersValue)(parameters, "isFirstSid", false);
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "sidBlock";
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    if (inputLength === 0) return inputOffset; //region Basic check for parameters
-    //noinspection JSCheckFunctionSignatures
-
-    if ((0, utils.checkBufferParams)(this, inputBuffer, inputOffset, inputLength) === false) return -1; //endregion
-
-    const intBuffer = new Uint8Array(inputBuffer, inputOffset, inputLength);
-    this.valueHex = new ArrayBuffer(inputLength);
-    let view = new Uint8Array(this.valueHex);
-
-    for (let i = 0; i < inputLength; i++) {
-      view[i] = intBuffer[i] & 0x7F;
-      this.blockLength++;
-      if ((intBuffer[i] & 0x80) === 0x00) break;
-    } //region Ajust size of valueHex buffer
-
-
-    const tempValueHex = new ArrayBuffer(this.blockLength);
-    const tempView = new Uint8Array(tempValueHex);
-
-    for (let i = 0; i < this.blockLength; i++) tempView[i] = view[i]; //noinspection JSCheckFunctionSignatures
-
-
-    this.valueHex = tempValueHex.slice(0);
-    view = new Uint8Array(this.valueHex); //endregion
-
-    if ((intBuffer[this.blockLength - 1] & 0x80) !== 0x00) {
-      this.error = "End of input reached before message was fully decoded";
-      return -1;
-    }
-
-    if (view[0] === 0x00) this.warnings.push("Needlessly long format of SID encoding");
-    if (this.blockLength <= 8) this.valueDec = (0, utils.utilFromBase)(view, 7);else {
-      this.isHexOnly = true;
-      this.warnings.push("Too big SID for decoding, hex only");
-    }
-    return inputOffset + this.blockLength;
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    //region Initial variables
-    let retBuf;
-    let retView; //endregion
-
-    if (this.isHexOnly) {
-      if (sizeOnly === true) return new ArrayBuffer(this.valueHex.byteLength);
-      const curView = new Uint8Array(this.valueHex);
-      retBuf = new ArrayBuffer(this.blockLength);
-      retView = new Uint8Array(retBuf);
-
-      for (let i = 0; i < this.blockLength - 1; i++) retView[i] = curView[i] | 0x80;
-
-      retView[this.blockLength - 1] = curView[this.blockLength - 1];
-      return retBuf;
-    }
-
-    const encodedBuf = (0, utils.utilToBase)(this.valueDec, 7);
-
-    if (encodedBuf.byteLength === 0) {
-      this.error = "Error during encoding SID value";
-      return new ArrayBuffer(0);
-    }
-
-    retBuf = new ArrayBuffer(encodedBuf.byteLength);
-
-    if (sizeOnly === false) {
-      const encodedView = new Uint8Array(encodedBuf);
-      retView = new Uint8Array(retBuf);
-
-      for (let i = 0; i < encodedBuf.byteLength - 1; i++) retView[i] = encodedView[i] | 0x80;
-
-      retView[encodedBuf.byteLength - 1] = encodedView[encodedBuf.byteLength - 1];
-    }
-
-    return retBuf;
-  } //**********************************************************************************
-
-  /**
-   * Create string representation of current SID block
-   * @returns {string}
-   */
-
-
-  toString() {
-    let result = "";
-    if (this.isHexOnly === true) result = (0, utils.bufferToHexCodes)(this.valueHex, 0, this.valueHex.byteLength);else {
-      if (this.isFirstSid) {
-        let sidValue = this.valueDec;
-        if (this.valueDec <= 39) result = "0.";else {
-          if (this.valueDec <= 79) {
-            result = "1.";
-            sidValue -= 40;
-          } else {
-            result = "2.";
-            sidValue -= 80;
-          }
-        }
-        result += sidValue.toString();
-      } else result = this.valueDec.toString();
-    }
-    return result;
-  } //**********************************************************************************
-  //noinspection JSUnusedGlobalSymbols
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {Object}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.valueDec = this.valueDec;
-    object.isFirstSid = this.isFirstSid;
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-
-class LocalObjectIdentifierValueBlock extends ValueBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalObjectIdentifierValueBlock" class
-   * @param {Object} [parameters={}]
-   * @property {ArrayBuffer} [valueHex]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.fromString((0, utils.getParametersValue)(parameters, "value", ""));
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    let resultOffset = inputOffset;
-
-    while (inputLength > 0) {
-      const sidBlock = new LocalSidValueBlock();
-      resultOffset = sidBlock.fromBER(inputBuffer, resultOffset, inputLength);
-
-      if (resultOffset === -1) {
-        this.blockLength = 0;
-        this.error = sidBlock.error;
-        return resultOffset;
-      }
-
-      if (this.value.length === 0) sidBlock.isFirstSid = true;
-      this.blockLength += sidBlock.blockLength;
-      inputLength -= sidBlock.blockLength;
-      this.value.push(sidBlock);
-    }
-
-    return resultOffset;
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    let retBuf = new ArrayBuffer(0);
-
-    for (let i = 0; i < this.value.length; i++) {
-      const valueBuf = this.value[i].toBER(sizeOnly);
-
-      if (valueBuf.byteLength === 0) {
-        this.error = this.value[i].error;
-        return new ArrayBuffer(0);
-      }
-
-      retBuf = (0, utils.utilConcatBuf)(retBuf, valueBuf);
-    }
-
-    return retBuf;
-  } //**********************************************************************************
-
-  /**
-   * Create "LocalObjectIdentifierValueBlock" class from string
-   * @param {string} string Input string to convert from
-   * @returns {boolean}
-   */
-
-
-  fromString(string) {
-    this.value = []; // Clear existing SID values
-
-    let pos1 = 0;
-    let pos2 = 0;
-    let sid = "";
-    let flag = false;
-
-    do {
-      pos2 = string.indexOf(".", pos1);
-      if (pos2 === -1) sid = string.substr(pos1);else sid = string.substr(pos1, pos2 - pos1);
-      pos1 = pos2 + 1;
-
-      if (flag) {
-        const sidBlock = this.value[0];
-        let plus = 0;
-
-        switch (sidBlock.valueDec) {
-          case 0:
-            break;
-
-          case 1:
-            plus = 40;
-            break;
-
-          case 2:
-            plus = 80;
-            break;
-
-          default:
-            this.value = []; // clear SID array
-
-            return false;
-          // ???
-        }
-
-        const parsedSID = parseInt(sid, 10);
-        if (isNaN(parsedSID)) return true;
-        sidBlock.valueDec = parsedSID + plus;
-        flag = false;
-      } else {
-        const sidBlock = new LocalSidValueBlock();
-        sidBlock.valueDec = parseInt(sid, 10);
-        if (isNaN(sidBlock.valueDec)) return true;
-
-        if (this.value.length === 0) {
-          sidBlock.isFirstSid = true;
-          flag = true;
-        }
-
-        this.value.push(sidBlock);
-      }
-    } while (pos2 !== -1);
-
-    return true;
-  } //**********************************************************************************
-
-  /**
-   * Converts "LocalObjectIdentifierValueBlock" class to string
-   * @returns {string}
-   */
-
-
-  toString() {
-    let result = "";
-    let isHexOnly = false;
-
-    for (let i = 0; i < this.value.length; i++) {
-      isHexOnly = this.value[i].isHexOnly;
-      let sidStr = this.value[i].toString();
-      if (i !== 0) result = `${result}.`;
-
-      if (isHexOnly) {
-        sidStr = `{${sidStr}}`;
-        if (this.value[i].isFirstSid) result = `2.{${sidStr} - 80}`;else result += sidStr;
-      } else result += sidStr;
-    }
-
-    return result;
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "ObjectIdentifierValueBlock";
-  } //**********************************************************************************
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {Object}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.value = this.toString();
-    object.sidArray = [];
-
-    for (let i = 0; i < this.value.length; i++) object.sidArray.push(this.value[i].toJSON());
-
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends BaseBlock
- */
-
-
-class ObjectIdentifier extends BaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "ObjectIdentifier" class
-   * @param {Object} [parameters={}]
-   * @property {ArrayBuffer} [valueHex]
-   */
-  constructor(parameters = {}) {
-    super(parameters, LocalObjectIdentifierValueBlock);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 6; // OBJECT IDENTIFIER
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "ObjectIdentifier";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of all string's classes
-//**************************************************************************************
-
-
-exports.ObjectIdentifier = ObjectIdentifier;
-
-class LocalUtf8StringValueBlock extends HexBlock(LocalBaseBlock) {
-  //**********************************************************************************
-  //noinspection JSUnusedGlobalSymbols
-
-  /**
-   * Constructor for "LocalUtf8StringValueBlock" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.isHexOnly = true;
-    this.value = ""; // String representation of decoded ArrayBuffer
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "Utf8StringValueBlock";
-  } //**********************************************************************************
-  //noinspection JSUnusedGlobalSymbols
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {Object}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.value = this.value;
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends BaseBlock
- */
-
-
-class Utf8String extends BaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Utf8String" class
-   * @param {Object} [parameters={}]
-   * @property {ArrayBuffer} [valueHex]
-   */
-  constructor(parameters = {}) {
-    super(parameters, LocalUtf8StringValueBlock);
-    if ("value" in parameters) this.fromString(parameters.value);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 12; // Utf8String
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "Utf8String";
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    const resultOffset = this.valueBlock.fromBER(inputBuffer, inputOffset, this.lenBlock.isIndefiniteForm === true ? inputLength : this.lenBlock.length);
-
-    if (resultOffset === -1) {
-      this.error = this.valueBlock.error;
-      return resultOffset;
-    }
-
-    this.fromBuffer(this.valueBlock.valueHex);
-    if (this.idBlock.error.length === 0) this.blockLength += this.idBlock.blockLength;
-    if (this.lenBlock.error.length === 0) this.blockLength += this.lenBlock.blockLength;
-    if (this.valueBlock.error.length === 0) this.blockLength += this.valueBlock.blockLength;
-    return resultOffset;
-  } //**********************************************************************************
-
-  /**
-   * Function converting ArrayBuffer into ASN.1 internal string
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   */
-
-
-  fromBuffer(inputBuffer) {
-    this.valueBlock.value = String.fromCharCode.apply(null, new Uint8Array(inputBuffer));
-
-    try {
-      //noinspection JSDeprecatedSymbols
-      this.valueBlock.value = decodeURIComponent(escape(this.valueBlock.value));
-    } catch (ex) {
-      this.warnings.push(`Error during "decodeURIComponent": ${ex}, using raw string`);
-    }
-  } //**********************************************************************************
-
-  /**
-   * Function converting JavaScript string into ASN.1 internal class
-   * @param {!string} inputString ASN.1 BER encoded array
-   */
-
-
-  fromString(inputString) {
-    //noinspection JSDeprecatedSymbols
-    const str = unescape(encodeURIComponent(inputString));
-    const strLen = str.length;
-    this.valueBlock.valueHex = new ArrayBuffer(strLen);
-    const view = new Uint8Array(this.valueBlock.valueHex);
-
-    for (let i = 0; i < strLen; i++) view[i] = str.charCodeAt(i);
-
-    this.valueBlock.value = inputString;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//region Declaration of ASN.1 RelativeObjectIdentifier type class
-//**************************************************************************************
-
-
-exports.Utf8String = Utf8String;
-
-class LocalRelativeSidValueBlock extends HexBlock(LocalBaseBlock) {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalRelativeSidValueBlock" class
-   * @param {Object} [parameters={}]
-   * @property {number} [valueDec]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.valueDec = (0, utils.getParametersValue)(parameters, "valueDec", -1);
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "relativeSidBlock";
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    if (inputLength === 0) return inputOffset; //region Basic check for parameters
-    //noinspection JSCheckFunctionSignatures
-
-    if ((0, utils.checkBufferParams)(this, inputBuffer, inputOffset, inputLength) === false) return -1; //endregion
-
-    const intBuffer = new Uint8Array(inputBuffer, inputOffset, inputLength);
-    this.valueHex = new ArrayBuffer(inputLength);
-    let view = new Uint8Array(this.valueHex);
-
-    for (let i = 0; i < inputLength; i++) {
-      view[i] = intBuffer[i] & 0x7F;
-      this.blockLength++;
-      if ((intBuffer[i] & 0x80) === 0x00) break;
-    } //region Ajust size of valueHex buffer
-
-
-    const tempValueHex = new ArrayBuffer(this.blockLength);
-    const tempView = new Uint8Array(tempValueHex);
-
-    for (let i = 0; i < this.blockLength; i++) tempView[i] = view[i]; //noinspection JSCheckFunctionSignatures
-
-
-    this.valueHex = tempValueHex.slice(0);
-    view = new Uint8Array(this.valueHex); //endregion
-
-    if ((intBuffer[this.blockLength - 1] & 0x80) !== 0x00) {
-      this.error = "End of input reached before message was fully decoded";
-      return -1;
-    }
-
-    if (view[0] === 0x00) this.warnings.push("Needlessly long format of SID encoding");
-    if (this.blockLength <= 8) this.valueDec = (0, utils.utilFromBase)(view, 7);else {
-      this.isHexOnly = true;
-      this.warnings.push("Too big SID for decoding, hex only");
-    }
-    return inputOffset + this.blockLength;
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    //region Initial variables
-    let retBuf;
-    let retView; //endregion
-
-    if (this.isHexOnly) {
-      if (sizeOnly === true) return new ArrayBuffer(this.valueHex.byteLength);
-      const curView = new Uint8Array(this.valueHex);
-      retBuf = new ArrayBuffer(this.blockLength);
-      retView = new Uint8Array(retBuf);
-
-      for (let i = 0; i < this.blockLength - 1; i++) retView[i] = curView[i] | 0x80;
-
-      retView[this.blockLength - 1] = curView[this.blockLength - 1];
-      return retBuf;
-    }
-
-    const encodedBuf = (0, utils.utilToBase)(this.valueDec, 7);
-
-    if (encodedBuf.byteLength === 0) {
-      this.error = "Error during encoding SID value";
-      return new ArrayBuffer(0);
-    }
-
-    retBuf = new ArrayBuffer(encodedBuf.byteLength);
-
-    if (sizeOnly === false) {
-      const encodedView = new Uint8Array(encodedBuf);
-      retView = new Uint8Array(retBuf);
-
-      for (let i = 0; i < encodedBuf.byteLength - 1; i++) retView[i] = encodedView[i] | 0x80;
-
-      retView[encodedBuf.byteLength - 1] = encodedView[encodedBuf.byteLength - 1];
-    }
-
-    return retBuf;
-  } //**********************************************************************************
-
-  /**
-   * Create string representation of current SID block
-   * @returns {string}
-   */
-
-
-  toString() {
-    let result = "";
-    if (this.isHexOnly === true) result = (0, utils.bufferToHexCodes)(this.valueHex, 0, this.valueHex.byteLength);else {
-      result = this.valueDec.toString();
-    }
-    return result;
-  } //**********************************************************************************
-  //noinspection JSUnusedGlobalSymbols
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {Object}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.valueDec = this.valueDec;
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-
-class LocalRelativeObjectIdentifierValueBlock extends ValueBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalRelativeObjectIdentifierValueBlock" class
-   * @param {Object} [parameters={}]
-   * @property {ArrayBuffer} [valueHex]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.fromString((0, utils.getParametersValue)(parameters, "value", ""));
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    let resultOffset = inputOffset;
-
-    while (inputLength > 0) {
-      const sidBlock = new LocalRelativeSidValueBlock();
-      resultOffset = sidBlock.fromBER(inputBuffer, resultOffset, inputLength);
-
-      if (resultOffset === -1) {
-        this.blockLength = 0;
-        this.error = sidBlock.error;
-        return resultOffset;
-      }
-
-      this.blockLength += sidBlock.blockLength;
-      inputLength -= sidBlock.blockLength;
-      this.value.push(sidBlock);
-    }
-
-    return resultOffset;
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    let retBuf = new ArrayBuffer(0);
-
-    for (let i = 0; i < this.value.length; i++) {
-      const valueBuf = this.value[i].toBER(sizeOnly);
-
-      if (valueBuf.byteLength === 0) {
-        this.error = this.value[i].error;
-        return new ArrayBuffer(0);
-      }
-
-      retBuf = (0, utils.utilConcatBuf)(retBuf, valueBuf);
-    }
-
-    return retBuf;
-  } //**********************************************************************************
-
-  /**
-   * Create "LocalRelativeObjectIdentifierValueBlock" class from string
-   * @param {string} string Input string to convert from
-   * @returns {boolean}
-   */
-
-
-  fromString(string) {
-    this.value = []; // Clear existing SID values
-
-    let pos1 = 0;
-    let pos2 = 0;
-    let sid = "";
-
-    do {
-      pos2 = string.indexOf(".", pos1);
-      if (pos2 === -1) sid = string.substr(pos1);else sid = string.substr(pos1, pos2 - pos1);
-      pos1 = pos2 + 1;
-      const sidBlock = new LocalRelativeSidValueBlock();
-      sidBlock.valueDec = parseInt(sid, 10);
-      if (isNaN(sidBlock.valueDec)) return true;
-      this.value.push(sidBlock);
-    } while (pos2 !== -1);
-
-    return true;
-  } //**********************************************************************************
-
-  /**
-   * Converts "LocalRelativeObjectIdentifierValueBlock" class to string
-   * @returns {string}
-   */
-
-
-  toString() {
-    let result = "";
-    let isHexOnly = false;
-
-    for (let i = 0; i < this.value.length; i++) {
-      isHexOnly = this.value[i].isHexOnly;
-      let sidStr = this.value[i].toString();
-      if (i !== 0) result = `${result}.`;
-
-      if (isHexOnly) {
-        sidStr = `{${sidStr}}`;
-        result += sidStr;
-      } else result += sidStr;
-    }
-
-    return result;
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "RelativeObjectIdentifierValueBlock";
-  } //**********************************************************************************
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {Object}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.value = this.toString();
-    object.sidArray = [];
-
-    for (let i = 0; i < this.value.length; i++) object.sidArray.push(this.value[i].toJSON());
-
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends BaseBlock
- */
-
-
-class RelativeObjectIdentifier extends BaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "RelativeObjectIdentifier" class
-   * @param {Object} [parameters={}]
-   * @property {ArrayBuffer} [valueHex]
-   */
-  constructor(parameters = {}) {
-    super(parameters, LocalRelativeObjectIdentifierValueBlock);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 13; // RELATIVE OBJECT IDENTIFIER
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "RelativeObjectIdentifier";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-
-/**
- * @extends LocalBaseBlock
- * @extends HexBlock
- */
-
-
-exports.RelativeObjectIdentifier = RelativeObjectIdentifier;
-
-class LocalBmpStringValueBlock extends HexBlock(LocalBaseBlock) {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalBmpStringValueBlock" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.isHexOnly = true;
-    this.value = "";
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "BmpStringValueBlock";
-  } //**********************************************************************************
-  //noinspection JSUnusedGlobalSymbols
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {Object}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.value = this.value;
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends BaseBlock
- */
-
-
-class BmpString extends BaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "BmpString" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters, LocalBmpStringValueBlock);
-    if ("value" in parameters) this.fromString(parameters.value);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 30; // BmpString
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "BmpString";
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    const resultOffset = this.valueBlock.fromBER(inputBuffer, inputOffset, this.lenBlock.isIndefiniteForm === true ? inputLength : this.lenBlock.length);
-
-    if (resultOffset === -1) {
-      this.error = this.valueBlock.error;
-      return resultOffset;
-    }
-
-    this.fromBuffer(this.valueBlock.valueHex);
-    if (this.idBlock.error.length === 0) this.blockLength += this.idBlock.blockLength;
-    if (this.lenBlock.error.length === 0) this.blockLength += this.lenBlock.blockLength;
-    if (this.valueBlock.error.length === 0) this.blockLength += this.valueBlock.blockLength;
-    return resultOffset;
-  } //**********************************************************************************
-
-  /**
-   * Function converting ArrayBuffer into ASN.1 internal string
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   */
-
-
-  fromBuffer(inputBuffer) {
-    //noinspection JSCheckFunctionSignatures
-    const copyBuffer = inputBuffer.slice(0);
-    const valueView = new Uint8Array(copyBuffer);
-
-    for (let i = 0; i < valueView.length; i += 2) {
-      const temp = valueView[i];
-      valueView[i] = valueView[i + 1];
-      valueView[i + 1] = temp;
-    }
-
-    this.valueBlock.value = String.fromCharCode.apply(null, new Uint16Array(copyBuffer));
-  } //**********************************************************************************
-
-  /**
-   * Function converting JavaScript string into ASN.1 internal class
-   * @param {!string} inputString ASN.1 BER encoded array
-   */
-
-
-  fromString(inputString) {
-    const strLength = inputString.length;
-    this.valueBlock.valueHex = new ArrayBuffer(strLength * 2);
-    const valueHexView = new Uint8Array(this.valueBlock.valueHex);
-
-    for (let i = 0; i < strLength; i++) {
-      const codeBuf = (0, utils.utilToBase)(inputString.charCodeAt(i), 8);
-      const codeView = new Uint8Array(codeBuf);
-      if (codeView.length > 2) continue;
-      const dif = 2 - codeView.length;
-
-      for (let j = codeView.length - 1; j >= 0; j--) valueHexView[i * 2 + j + dif] = codeView[j];
-    }
-
-    this.valueBlock.value = inputString;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-
-exports.BmpString = BmpString;
-
-class LocalUniversalStringValueBlock extends HexBlock(LocalBaseBlock) {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalUniversalStringValueBlock" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.isHexOnly = true;
-    this.value = "";
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "UniversalStringValueBlock";
-  } //**********************************************************************************
-  //noinspection JSUnusedGlobalSymbols
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {Object}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.value = this.value;
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends BaseBlock
- */
-
-
-class UniversalString extends BaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "UniversalString" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters, LocalUniversalStringValueBlock);
-    if ("value" in parameters) this.fromString(parameters.value);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 28; // UniversalString
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "UniversalString";
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    const resultOffset = this.valueBlock.fromBER(inputBuffer, inputOffset, this.lenBlock.isIndefiniteForm === true ? inputLength : this.lenBlock.length);
-
-    if (resultOffset === -1) {
-      this.error = this.valueBlock.error;
-      return resultOffset;
-    }
-
-    this.fromBuffer(this.valueBlock.valueHex);
-    if (this.idBlock.error.length === 0) this.blockLength += this.idBlock.blockLength;
-    if (this.lenBlock.error.length === 0) this.blockLength += this.lenBlock.blockLength;
-    if (this.valueBlock.error.length === 0) this.blockLength += this.valueBlock.blockLength;
-    return resultOffset;
-  } //**********************************************************************************
-
-  /**
-   * Function converting ArrayBuffer into ASN.1 internal string
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   */
-
-
-  fromBuffer(inputBuffer) {
-    //noinspection JSCheckFunctionSignatures
-    const copyBuffer = inputBuffer.slice(0);
-    const valueView = new Uint8Array(copyBuffer);
-
-    for (let i = 0; i < valueView.length; i += 4) {
-      valueView[i] = valueView[i + 3];
-      valueView[i + 1] = valueView[i + 2];
-      valueView[i + 2] = 0x00;
-      valueView[i + 3] = 0x00;
-    }
-
-    this.valueBlock.value = String.fromCharCode.apply(null, new Uint32Array(copyBuffer));
-  } //**********************************************************************************
-
-  /**
-   * Function converting JavaScript string into ASN.1 internal class
-   * @param {!string} inputString ASN.1 BER encoded array
-   */
-
-
-  fromString(inputString) {
-    const strLength = inputString.length;
-    this.valueBlock.valueHex = new ArrayBuffer(strLength * 4);
-    const valueHexView = new Uint8Array(this.valueBlock.valueHex);
-
-    for (let i = 0; i < strLength; i++) {
-      const codeBuf = (0, utils.utilToBase)(inputString.charCodeAt(i), 8);
-      const codeView = new Uint8Array(codeBuf);
-      if (codeView.length > 4) continue;
-      const dif = 4 - codeView.length;
-
-      for (let j = codeView.length - 1; j >= 0; j--) valueHexView[i * 4 + j + dif] = codeView[j];
-    }
-
-    this.valueBlock.value = inputString;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-
-exports.UniversalString = UniversalString;
-
-class LocalSimpleStringValueBlock extends HexBlock(LocalBaseBlock) {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalSimpleStringValueBlock" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.value = "";
-    this.isHexOnly = true;
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "SimpleStringValueBlock";
-  } //**********************************************************************************
-  //noinspection JSUnusedGlobalSymbols
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {Object}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.value = this.value;
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends BaseBlock
- */
-
-
-class LocalSimpleStringBlock extends BaseBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "LocalSimpleStringBlock" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters, LocalSimpleStringValueBlock);
-    if ("value" in parameters) this.fromString(parameters.value);
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "SIMPLESTRING";
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    const resultOffset = this.valueBlock.fromBER(inputBuffer, inputOffset, this.lenBlock.isIndefiniteForm === true ? inputLength : this.lenBlock.length);
-
-    if (resultOffset === -1) {
-      this.error = this.valueBlock.error;
-      return resultOffset;
-    }
-
-    this.fromBuffer(this.valueBlock.valueHex);
-    if (this.idBlock.error.length === 0) this.blockLength += this.idBlock.blockLength;
-    if (this.lenBlock.error.length === 0) this.blockLength += this.lenBlock.blockLength;
-    if (this.valueBlock.error.length === 0) this.blockLength += this.valueBlock.blockLength;
-    return resultOffset;
-  } //**********************************************************************************
-
-  /**
-   * Function converting ArrayBuffer into ASN.1 internal string
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   */
-
-
-  fromBuffer(inputBuffer) {
-    this.valueBlock.value = String.fromCharCode.apply(null, new Uint8Array(inputBuffer));
-  } //**********************************************************************************
-
-  /**
-   * Function converting JavaScript string into ASN.1 internal class
-   * @param {!string} inputString ASN.1 BER encoded array
-   */
-
-
-  fromString(inputString) {
-    const strLen = inputString.length;
-    this.valueBlock.valueHex = new ArrayBuffer(strLen);
-    const view = new Uint8Array(this.valueBlock.valueHex);
-
-    for (let i = 0; i < strLen; i++) view[i] = inputString.charCodeAt(i);
-
-    this.valueBlock.value = inputString;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends LocalSimpleStringBlock
- */
-
-
-class NumericString extends LocalSimpleStringBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "NumericString" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 18; // NumericString
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "NumericString";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends LocalSimpleStringBlock
- */
-
-
-exports.NumericString = NumericString;
-
-class PrintableString extends LocalSimpleStringBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "PrintableString" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 19; // PrintableString
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "PrintableString";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends LocalSimpleStringBlock
- */
-
-
-exports.PrintableString = PrintableString;
-
-class TeletexString extends LocalSimpleStringBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "TeletexString" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 20; // TeletexString
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "TeletexString";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends LocalSimpleStringBlock
- */
-
-
-exports.TeletexString = TeletexString;
-
-class VideotexString extends LocalSimpleStringBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "VideotexString" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 21; // VideotexString
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "VideotexString";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends LocalSimpleStringBlock
- */
-
-
-exports.VideotexString = VideotexString;
-
-class IA5String extends LocalSimpleStringBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "IA5String" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 22; // IA5String
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "IA5String";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends LocalSimpleStringBlock
- */
-
-
-exports.IA5String = IA5String;
-
-class GraphicString extends LocalSimpleStringBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "GraphicString" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 25; // GraphicString
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "GraphicString";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends LocalSimpleStringBlock
- */
-
-
-exports.GraphicString = GraphicString;
-
-class VisibleString extends LocalSimpleStringBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "VisibleString" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 26; // VisibleString
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "VisibleString";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends LocalSimpleStringBlock
- */
-
-
-exports.VisibleString = VisibleString;
-
-class GeneralString extends LocalSimpleStringBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "GeneralString" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 27; // GeneralString
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "GeneralString";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends LocalSimpleStringBlock
- */
-
-
-exports.GeneralString = GeneralString;
-
-class CharacterString extends LocalSimpleStringBlock {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "CharacterString" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 29; // CharacterString
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "CharacterString";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of all date and time classes
-//**************************************************************************************
-
-/**
- * @extends VisibleString
- */
-
-
-exports.CharacterString = CharacterString;
-
-class UTCTime extends VisibleString {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "UTCTime" class
-   * @param {Object} [parameters={}]
-   * @property {string} [value] String representatio of the date
-   * @property {Date} [valueDate] JavaScript "Date" object
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.year = 0;
-    this.month = 0;
-    this.day = 0;
-    this.hour = 0;
-    this.minute = 0;
-    this.second = 0; //region Create UTCTime from ASN.1 UTC string value
-
-    if ("value" in parameters) {
-      this.fromString(parameters.value);
-      this.valueBlock.valueHex = new ArrayBuffer(parameters.value.length);
-      const view = new Uint8Array(this.valueBlock.valueHex);
-
-      for (let i = 0; i < parameters.value.length; i++) view[i] = parameters.value.charCodeAt(i);
-    } //endregion
-    //region Create GeneralizedTime from JavaScript Date type
-
-
-    if ("valueDate" in parameters) {
-      this.fromDate(parameters.valueDate);
-      this.valueBlock.valueHex = this.toBuffer();
-    } //endregion
-
-
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 23; // UTCTime
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    const resultOffset = this.valueBlock.fromBER(inputBuffer, inputOffset, this.lenBlock.isIndefiniteForm === true ? inputLength : this.lenBlock.length);
-
-    if (resultOffset === -1) {
-      this.error = this.valueBlock.error;
-      return resultOffset;
-    }
-
-    this.fromBuffer(this.valueBlock.valueHex);
-    if (this.idBlock.error.length === 0) this.blockLength += this.idBlock.blockLength;
-    if (this.lenBlock.error.length === 0) this.blockLength += this.lenBlock.blockLength;
-    if (this.valueBlock.error.length === 0) this.blockLength += this.valueBlock.blockLength;
-    return resultOffset;
-  } //**********************************************************************************
-
-  /**
-   * Function converting ArrayBuffer into ASN.1 internal string
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   */
-
-
-  fromBuffer(inputBuffer) {
-    this.fromString(String.fromCharCode.apply(null, new Uint8Array(inputBuffer)));
-  } //**********************************************************************************
-
-  /**
-   * Function converting ASN.1 internal string into ArrayBuffer
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBuffer() {
-    const str = this.toString();
-    const buffer = new ArrayBuffer(str.length);
-    const view = new Uint8Array(buffer);
-
-    for (let i = 0; i < str.length; i++) view[i] = str.charCodeAt(i);
-
-    return buffer;
-  } //**********************************************************************************
-
-  /**
-   * Function converting "Date" object into ASN.1 internal string
-   * @param {!Date} inputDate JavaScript "Date" object
-   */
-
-
-  fromDate(inputDate) {
-    this.year = inputDate.getUTCFullYear();
-    this.month = inputDate.getUTCMonth() + 1;
-    this.day = inputDate.getUTCDate();
-    this.hour = inputDate.getUTCHours();
-    this.minute = inputDate.getUTCMinutes();
-    this.second = inputDate.getUTCSeconds();
-  } //**********************************************************************************
-  //noinspection JSUnusedGlobalSymbols
-
-  /**
-   * Function converting ASN.1 internal string into "Date" object
-   * @returns {Date}
-   */
-
-
-  toDate() {
-    return new Date(Date.UTC(this.year, this.month - 1, this.day, this.hour, this.minute, this.second));
-  } //**********************************************************************************
-
-  /**
-   * Function converting JavaScript string into ASN.1 internal class
-   * @param {!string} inputString ASN.1 BER encoded array
-   */
-
-
-  fromString(inputString) {
-    //region Parse input string
-    const parser = /(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z/ig;
-    const parserArray = parser.exec(inputString);
-
-    if (parserArray === null) {
-      this.error = "Wrong input string for convertion";
-      return;
-    } //endregion
-    //region Store parsed values
-
-
-    const year = parseInt(parserArray[1], 10);
-    if (year >= 50) this.year = 1900 + year;else this.year = 2000 + year;
-    this.month = parseInt(parserArray[2], 10);
-    this.day = parseInt(parserArray[3], 10);
-    this.hour = parseInt(parserArray[4], 10);
-    this.minute = parseInt(parserArray[5], 10);
-    this.second = parseInt(parserArray[6], 10); //endregion
-  } //**********************************************************************************
-
-  /**
-   * Function converting ASN.1 internal class into JavaScript string
-   * @returns {string}
-   */
-
-
-  toString() {
-    const outputArray = new Array(7);
-    outputArray[0] = (0, utils.padNumber)(this.year < 2000 ? this.year - 1900 : this.year - 2000, 2);
-    outputArray[1] = (0, utils.padNumber)(this.month, 2);
-    outputArray[2] = (0, utils.padNumber)(this.day, 2);
-    outputArray[3] = (0, utils.padNumber)(this.hour, 2);
-    outputArray[4] = (0, utils.padNumber)(this.minute, 2);
-    outputArray[5] = (0, utils.padNumber)(this.second, 2);
-    outputArray[6] = "Z";
-    return outputArray.join("");
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "UTCTime";
-  } //**********************************************************************************
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {Object}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.year = this.year;
-    object.month = this.month;
-    object.day = this.day;
-    object.hour = this.hour;
-    object.minute = this.minute;
-    object.second = this.second;
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends VisibleString
- */
-
-
-exports.UTCTime = UTCTime;
-
-class GeneralizedTime extends VisibleString {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "GeneralizedTime" class
-   * @param {Object} [parameters={}]
-   * @property {string} [value] String representatio of the date
-   * @property {Date} [valueDate] JavaScript "Date" object
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.year = 0;
-    this.month = 0;
-    this.day = 0;
-    this.hour = 0;
-    this.minute = 0;
-    this.second = 0;
-    this.millisecond = 0; //region Create UTCTime from ASN.1 UTC string value
-
-    if ("value" in parameters) {
-      this.fromString(parameters.value);
-      this.valueBlock.valueHex = new ArrayBuffer(parameters.value.length);
-      const view = new Uint8Array(this.valueBlock.valueHex);
-
-      for (let i = 0; i < parameters.value.length; i++) view[i] = parameters.value.charCodeAt(i);
-    } //endregion
-    //region Create GeneralizedTime from JavaScript Date type
-
-
-    if ("valueDate" in parameters) {
-      this.fromDate(parameters.valueDate);
-      this.valueBlock.valueHex = this.toBuffer();
-    } //endregion
-
-
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 24; // GeneralizedTime
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    const resultOffset = this.valueBlock.fromBER(inputBuffer, inputOffset, this.lenBlock.isIndefiniteForm === true ? inputLength : this.lenBlock.length);
-
-    if (resultOffset === -1) {
-      this.error = this.valueBlock.error;
-      return resultOffset;
-    }
-
-    this.fromBuffer(this.valueBlock.valueHex);
-    if (this.idBlock.error.length === 0) this.blockLength += this.idBlock.blockLength;
-    if (this.lenBlock.error.length === 0) this.blockLength += this.lenBlock.blockLength;
-    if (this.valueBlock.error.length === 0) this.blockLength += this.valueBlock.blockLength;
-    return resultOffset;
-  } //**********************************************************************************
-
-  /**
-   * Function converting ArrayBuffer into ASN.1 internal string
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   */
-
-
-  fromBuffer(inputBuffer) {
-    this.fromString(String.fromCharCode.apply(null, new Uint8Array(inputBuffer)));
-  } //**********************************************************************************
-
-  /**
-   * Function converting ASN.1 internal string into ArrayBuffer
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBuffer() {
-    const str = this.toString();
-    const buffer = new ArrayBuffer(str.length);
-    const view = new Uint8Array(buffer);
-
-    for (let i = 0; i < str.length; i++) view[i] = str.charCodeAt(i);
-
-    return buffer;
-  } //**********************************************************************************
-
-  /**
-   * Function converting "Date" object into ASN.1 internal string
-   * @param {!Date} inputDate JavaScript "Date" object
-   */
-
-
-  fromDate(inputDate) {
-    this.year = inputDate.getUTCFullYear();
-    this.month = inputDate.getUTCMonth() + 1;
-    this.day = inputDate.getUTCDate();
-    this.hour = inputDate.getUTCHours();
-    this.minute = inputDate.getUTCMinutes();
-    this.second = inputDate.getUTCSeconds();
-    this.millisecond = inputDate.getUTCMilliseconds();
-  } //**********************************************************************************
-  //noinspection JSUnusedGlobalSymbols
-
-  /**
-   * Function converting ASN.1 internal string into "Date" object
-   * @returns {Date}
-   */
-
-
-  toDate() {
-    return new Date(Date.UTC(this.year, this.month - 1, this.day, this.hour, this.minute, this.second, this.millisecond));
-  } //**********************************************************************************
-
-  /**
-   * Function converting JavaScript string into ASN.1 internal class
-   * @param {!string} inputString ASN.1 BER encoded array
-   */
-
-
-  fromString(inputString) {
-    //region Initial variables
-    let isUTC = false;
-    let timeString = "";
-    let dateTimeString = "";
-    let fractionPart = 0;
-    let parser;
-    let hourDifference = 0;
-    let minuteDifference = 0; //endregion
-    //region Convert as UTC time
-
-    if (inputString[inputString.length - 1] === "Z") {
-      timeString = inputString.substr(0, inputString.length - 1);
-      isUTC = true;
-    } //endregion
-    //region Convert as local time
-    else {
-        //noinspection JSPrimitiveTypeWrapperUsage
-        const number = new Number(inputString[inputString.length - 1]);
-        if (isNaN(number.valueOf())) throw new Error("Wrong input string for convertion");
-        timeString = inputString;
-      } //endregion
-    //region Check that we do not have a "+" and "-" symbols inside UTC time
-
-
-    if (isUTC) {
-      if (timeString.indexOf("+") !== -1) throw new Error("Wrong input string for convertion");
-      if (timeString.indexOf("-") !== -1) throw new Error("Wrong input string for convertion");
-    } //endregion
-    //region Get "UTC time difference" in case of local time
-    else {
-        let multiplier = 1;
-        let differencePosition = timeString.indexOf("+");
-        let differenceString = "";
-
-        if (differencePosition === -1) {
-          differencePosition = timeString.indexOf("-");
-          multiplier = -1;
-        }
-
-        if (differencePosition !== -1) {
-          differenceString = timeString.substr(differencePosition + 1);
-          timeString = timeString.substr(0, differencePosition);
-          if (differenceString.length !== 2 && differenceString.length !== 4) throw new Error("Wrong input string for convertion"); //noinspection JSPrimitiveTypeWrapperUsage
-
-          let number = new Number(differenceString.substr(0, 2));
-          if (isNaN(number.valueOf())) throw new Error("Wrong input string for convertion");
-          hourDifference = multiplier * number;
-
-          if (differenceString.length === 4) {
-            //noinspection JSPrimitiveTypeWrapperUsage
-            number = new Number(differenceString.substr(2, 2));
-            if (isNaN(number.valueOf())) throw new Error("Wrong input string for convertion");
-            minuteDifference = multiplier * number;
-          }
-        }
-      } //endregion
-    //region Get position of fraction point
-
-
-    let fractionPointPosition = timeString.indexOf("."); // Check for "full stop" symbol
-
-    if (fractionPointPosition === -1) fractionPointPosition = timeString.indexOf(","); // Check for "comma" symbol
-    //endregion
-    //region Get fraction part
-
-    if (fractionPointPosition !== -1) {
-      //noinspection JSPrimitiveTypeWrapperUsage
-      const fractionPartCheck = new Number(`0${timeString.substr(fractionPointPosition)}`);
-      if (isNaN(fractionPartCheck.valueOf())) throw new Error("Wrong input string for convertion");
-      fractionPart = fractionPartCheck.valueOf();
-      dateTimeString = timeString.substr(0, fractionPointPosition);
-    } else dateTimeString = timeString; //endregion
-    //region Parse internal date
-
-
-    switch (true) {
-      case dateTimeString.length === 8:
-        // "YYYYMMDD"
-        parser = /(\d{4})(\d{2})(\d{2})/ig;
-        if (fractionPointPosition !== -1) throw new Error("Wrong input string for convertion"); // Here we should not have a "fraction point"
-
-        break;
-
-      case dateTimeString.length === 10:
-        // "YYYYMMDDHH"
-        parser = /(\d{4})(\d{2})(\d{2})(\d{2})/ig;
-
-        if (fractionPointPosition !== -1) {
-          let fractionResult = 60 * fractionPart;
-          this.minute = Math.floor(fractionResult);
-          fractionResult = 60 * (fractionResult - this.minute);
-          this.second = Math.floor(fractionResult);
-          fractionResult = 1000 * (fractionResult - this.second);
-          this.millisecond = Math.floor(fractionResult);
-        }
-
-        break;
-
-      case dateTimeString.length === 12:
-        // "YYYYMMDDHHMM"
-        parser = /(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})/ig;
-
-        if (fractionPointPosition !== -1) {
-          let fractionResult = 60 * fractionPart;
-          this.second = Math.floor(fractionResult);
-          fractionResult = 1000 * (fractionResult - this.second);
-          this.millisecond = Math.floor(fractionResult);
-        }
-
-        break;
-
-      case dateTimeString.length === 14:
-        // "YYYYMMDDHHMMSS"
-        parser = /(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/ig;
-
-        if (fractionPointPosition !== -1) {
-          const fractionResult = 1000 * fractionPart;
-          this.millisecond = Math.floor(fractionResult);
-        }
-
-        break;
-
-      default:
-        throw new Error("Wrong input string for convertion");
-    } //endregion
-    //region Put parsed values at right places
-
-
-    const parserArray = parser.exec(dateTimeString);
-    if (parserArray === null) throw new Error("Wrong input string for convertion");
-
-    for (let j = 1; j < parserArray.length; j++) {
-      switch (j) {
-        case 1:
-          this.year = parseInt(parserArray[j], 10);
-          break;
-
-        case 2:
-          this.month = parseInt(parserArray[j], 10);
-          break;
-
-        case 3:
-          this.day = parseInt(parserArray[j], 10);
-          break;
-
-        case 4:
-          this.hour = parseInt(parserArray[j], 10) + hourDifference;
-          break;
-
-        case 5:
-          this.minute = parseInt(parserArray[j], 10) + minuteDifference;
-          break;
-
-        case 6:
-          this.second = parseInt(parserArray[j], 10);
-          break;
-
-        default:
-          throw new Error("Wrong input string for convertion");
-      }
-    } //endregion
-    //region Get final date
-
-
-    if (isUTC === false) {
-      const tempDate = new Date(this.year, this.month, this.day, this.hour, this.minute, this.second, this.millisecond);
-      this.year = tempDate.getUTCFullYear();
-      this.month = tempDate.getUTCMonth();
-      this.day = tempDate.getUTCDay();
-      this.hour = tempDate.getUTCHours();
-      this.minute = tempDate.getUTCMinutes();
-      this.second = tempDate.getUTCSeconds();
-      this.millisecond = tempDate.getUTCMilliseconds();
-    } //endregion
-
-  } //**********************************************************************************
-
-  /**
-   * Function converting ASN.1 internal class into JavaScript string
-   * @returns {string}
-   */
-
-
-  toString() {
-    const outputArray = [];
-    outputArray.push((0, utils.padNumber)(this.year, 4));
-    outputArray.push((0, utils.padNumber)(this.month, 2));
-    outputArray.push((0, utils.padNumber)(this.day, 2));
-    outputArray.push((0, utils.padNumber)(this.hour, 2));
-    outputArray.push((0, utils.padNumber)(this.minute, 2));
-    outputArray.push((0, utils.padNumber)(this.second, 2));
-
-    if (this.millisecond !== 0) {
-      outputArray.push(".");
-      outputArray.push((0, utils.padNumber)(this.millisecond, 3));
-    }
-
-    outputArray.push("Z");
-    return outputArray.join("");
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "GeneralizedTime";
-  } //**********************************************************************************
-
-  /**
-   * Convertion for the block to JSON object
-   * @returns {Object}
-   */
-
-
-  toJSON() {
-    let object = {}; //region Seems at the moment (Sep 2016) there is no way how to check method is supported in "super" object
-
-    try {
-      object = super.toJSON();
-    } catch (ex) {} //endregion
-
-
-    object.year = this.year;
-    object.month = this.month;
-    object.day = this.day;
-    object.hour = this.hour;
-    object.minute = this.minute;
-    object.second = this.second;
-    object.millisecond = this.millisecond;
-    return object;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends Utf8String
- */
-
-
-exports.GeneralizedTime = GeneralizedTime;
-
-class DATE extends Utf8String {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "DATE" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 31; // DATE
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "DATE";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends Utf8String
- */
-
-
-exports.DATE = DATE;
-
-class TimeOfDay extends Utf8String {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "TimeOfDay" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 32; // TimeOfDay
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "TimeOfDay";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends Utf8String
- */
-
-
-exports.TimeOfDay = TimeOfDay;
-
-class DateTime extends Utf8String {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "DateTime" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 33; // DateTime
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "DateTime";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends Utf8String
- */
-
-
-exports.DateTime = DateTime;
-
-class Duration extends Utf8String {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Duration" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 34; // Duration
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "Duration";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-
-/**
- * @extends Utf8String
- */
-
-
-exports.Duration = Duration;
-
-class TIME extends Utf8String {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Time" class
-   * @param {Object} [parameters={}]
-   */
-  constructor(parameters = {}) {
-    super(parameters);
-    this.idBlock.tagClass = 1; // UNIVERSAL
-
-    this.idBlock.tagNumber = 14; // Time
-  } //**********************************************************************************
-
-  /**
-   * Aux function, need to get a block name. Need to have it here for inhiritence
-   * @returns {string}
-   */
-
-
-  static blockName() {
-    return "TIME";
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of special ASN.1 schema type Choice
-//**************************************************************************************
-
-
-exports.TIME = TIME;
-
-class Choice {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Choice" class
-   * @param {Object} [parameters={}]
-   * @property {Array} [value] Array of ASN.1 types for make a choice from
-   * @property {boolean} [optional]
-   */
-  constructor(parameters = {}) {
-    this.value = (0, utils.getParametersValue)(parameters, "value", []);
-    this.optional = (0, utils.getParametersValue)(parameters, "optional", false);
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of special ASN.1 schema type Any
-//**************************************************************************************
-
-
-exports.Choice = Choice;
-
-class Any {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Any" class
-   * @param {Object} [parameters={}]
-   * @property {string} [name]
-   * @property {boolean} [optional]
-   */
-  constructor(parameters = {}) {
-    this.name = (0, utils.getParametersValue)(parameters, "name", "");
-    this.optional = (0, utils.getParametersValue)(parameters, "optional", false);
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of special ASN.1 schema type Repeated
-//**************************************************************************************
-
-
-exports.Any = Any;
-
-class Repeated {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Repeated" class
-   * @param {Object} [parameters={}]
-   * @property {string} [name]
-   * @property {boolean} [optional]
-   */
-  constructor(parameters = {}) {
-    this.name = (0, utils.getParametersValue)(parameters, "name", "");
-    this.optional = (0, utils.getParametersValue)(parameters, "optional", false);
-    this.value = (0, utils.getParametersValue)(parameters, "value", new Any());
-    this.local = (0, utils.getParametersValue)(parameters, "local", false); // Could local or global array to store elements
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Declaration of special ASN.1 schema type RawData
-//**************************************************************************************
-
-/**
- * @description Special class providing ability to have "toBER/fromBER" for raw ArrayBuffer
- */
-
-
-exports.Repeated = Repeated;
-
-class RawData {
-  //**********************************************************************************
-
-  /**
-   * Constructor for "Repeated" class
-   * @param {Object} [parameters={}]
-   * @property {string} [name]
-   * @property {boolean} [optional]
-   */
-  constructor(parameters = {}) {
-    this.data = (0, utils.getParametersValue)(parameters, "data", new ArrayBuffer(0));
-  } //**********************************************************************************
-
-  /**
-   * Base function for converting block from BER encoded array of bytes
-   * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
-   * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
-   * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
-   * @returns {number} Offset after least decoded byte
-   */
-
-
-  fromBER(inputBuffer, inputOffset, inputLength) {
-    this.data = inputBuffer.slice(inputOffset, inputLength);
-    return inputOffset + inputLength;
-  } //**********************************************************************************
-
-  /**
-   * Encoding of current ASN.1 block into ASN.1 encoded array (BER rules)
-   * @param {boolean} [sizeOnly=false] Flag that we need only a size of encoding, not a real array of bytes
-   * @returns {ArrayBuffer}
-   */
-
-
-  toBER(sizeOnly = false) {
-    return this.data;
-  } //**********************************************************************************
-
-
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Major ASN.1 BER decoding function
-//**************************************************************************************
-
-/**
- * Internal library function for decoding ASN.1 BER
- * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array
- * @param {!number} inputOffset Offset in ASN.1 BER encoded array where decoding should be started
- * @param {!number} inputLength Maximum length of array of bytes which can be using in this function
- * @returns {{offset: number, result: Object}}
- */
-
-
-exports.RawData = RawData;
-
-function LocalFromBER(inputBuffer, inputOffset, inputLength) {
-  const incomingOffset = inputOffset; // Need to store initial offset since "inputOffset" is changing in the function
-  //region Local function changing a type for ASN.1 classes
-
-  function localChangeType(inputObject, newType) {
-    if (inputObject instanceof newType) return inputObject;
-    const newObject = new newType();
-    newObject.idBlock = inputObject.idBlock;
-    newObject.lenBlock = inputObject.lenBlock;
-    newObject.warnings = inputObject.warnings; //noinspection JSCheckFunctionSignatures
-
-    newObject.valueBeforeDecode = inputObject.valueBeforeDecode.slice(0);
-    return newObject;
-  } //endregion
-  //region Create a basic ASN.1 type since we need to return errors and warnings from the function
-
-
-  let returnObject = new BaseBlock({}, Object); //endregion
-  //region Basic check for parameters
-
-  const baseBlock = new LocalBaseBlock();
-
-  if ((0, utils.checkBufferParams)(baseBlock, inputBuffer, inputOffset, inputLength) === false) {
-    returnObject.error = baseBlock.error;
-    return {
-      offset: -1,
-      result: returnObject
-    };
-  } //endregion
-  //region Getting Uint8Array from ArrayBuffer
-
-
-  const intBuffer = new Uint8Array(inputBuffer, inputOffset, inputLength); //endregion
-  //region Initial checks
-
-  if (intBuffer.length === 0) {
-    this.error = "Zero buffer length";
-    return {
-      offset: -1,
-      result: returnObject
-    };
-  } //endregion
-  //region Decode indentifcation block of ASN.1 BER structure
-
-
-  let resultOffset = returnObject.idBlock.fromBER(inputBuffer, inputOffset, inputLength);
-  returnObject.warnings.concat(returnObject.idBlock.warnings);
-
-  if (resultOffset === -1) {
-    returnObject.error = returnObject.idBlock.error;
-    return {
-      offset: -1,
-      result: returnObject
-    };
-  }
-
-  inputOffset = resultOffset;
-  inputLength -= returnObject.idBlock.blockLength; //endregion
-  //region Decode length block of ASN.1 BER structure
-
-  resultOffset = returnObject.lenBlock.fromBER(inputBuffer, inputOffset, inputLength);
-  returnObject.warnings.concat(returnObject.lenBlock.warnings);
-
-  if (resultOffset === -1) {
-    returnObject.error = returnObject.lenBlock.error;
-    return {
-      offset: -1,
-      result: returnObject
-    };
-  }
-
-  inputOffset = resultOffset;
-  inputLength -= returnObject.lenBlock.blockLength; //endregion
-  //region Check for usign indefinite length form in encoding for primitive types
-
-  if (returnObject.idBlock.isConstructed === false && returnObject.lenBlock.isIndefiniteForm === true) {
-    returnObject.error = "Indefinite length form used for primitive encoding form";
-    return {
-      offset: -1,
-      result: returnObject
-    };
-  } //endregion
-  //region Switch ASN.1 block type
-
-
-  let newASN1Type = BaseBlock;
-
-  switch (returnObject.idBlock.tagClass) {
-    //region UNIVERSAL
-    case 1:
-      //region Check for reserved tag numbers
-      if (returnObject.idBlock.tagNumber >= 37 && returnObject.idBlock.isHexOnly === false) {
-        returnObject.error = "UNIVERSAL 37 and upper tags are reserved by ASN.1 standard";
-        return {
-          offset: -1,
-          result: returnObject
-        };
-      } //endregion
-
-
-      switch (returnObject.idBlock.tagNumber) {
-        //region EndOfContent type
-        case 0:
-          //region Check for EndOfContent type
-          if (returnObject.idBlock.isConstructed === true && returnObject.lenBlock.length > 0) {
-            returnObject.error = "Type [UNIVERSAL 0] is reserved";
-            return {
-              offset: -1,
-              result: returnObject
-            };
-          } //endregion
-
-
-          newASN1Type = EndOfContent;
-          break;
-        //endregion
-        //region Boolean type
-
-        case 1:
-          newASN1Type = Boolean;
-          break;
-        //endregion
-        //region Integer type
-
-        case 2:
-          newASN1Type = Integer;
-          break;
-        //endregion
-        //region BitString type
-
-        case 3:
-          newASN1Type = BitString;
-          break;
-        //endregion
-        //region OctetString type
-
-        case 4:
-          newASN1Type = OctetString;
-          break;
-        //endregion
-        //region Null type
-
-        case 5:
-          newASN1Type = Null;
-          break;
-        //endregion
-        //region OBJECT IDENTIFIER type
-
-        case 6:
-          newASN1Type = ObjectIdentifier;
-          break;
-        //endregion
-        //region Enumerated type
-
-        case 10:
-          newASN1Type = Enumerated;
-          break;
-        //endregion
-        //region Utf8String type
-
-        case 12:
-          newASN1Type = Utf8String;
-          break;
-        //endregion
-        //region Time type
-        //region RELATIVE OBJECT IDENTIFIER type
-
-        case 13:
-          newASN1Type = RelativeObjectIdentifier;
-          break;
-        //endregion
-
-        case 14:
-          newASN1Type = TIME;
-          break;
-        //endregion
-        //region ASN.1 reserved type
-
-        case 15:
-          returnObject.error = "[UNIVERSAL 15] is reserved by ASN.1 standard";
-          return {
-            offset: -1,
-            result: returnObject
-          };
-        //endregion
-        //region Sequence type
-
-        case 16:
-          newASN1Type = Sequence;
-          break;
-        //endregion
-        //region Set type
-
-        case 17:
-          newASN1Type = Set;
-          break;
-        //endregion
-        //region NumericString type
-
-        case 18:
-          newASN1Type = NumericString;
-          break;
-        //endregion
-        //region PrintableString type
-
-        case 19:
-          newASN1Type = PrintableString;
-          break;
-        //endregion
-        //region TeletexString type
-
-        case 20:
-          newASN1Type = TeletexString;
-          break;
-        //endregion
-        //region VideotexString type
-
-        case 21:
-          newASN1Type = VideotexString;
-          break;
-        //endregion
-        //region IA5String type
-
-        case 22:
-          newASN1Type = IA5String;
-          break;
-        //endregion
-        //region UTCTime type
-
-        case 23:
-          newASN1Type = UTCTime;
-          break;
-        //endregion
-        //region GeneralizedTime type
-
-        case 24:
-          newASN1Type = GeneralizedTime;
-          break;
-        //endregion
-        //region GraphicString type
-
-        case 25:
-          newASN1Type = GraphicString;
-          break;
-        //endregion
-        //region VisibleString type
-
-        case 26:
-          newASN1Type = VisibleString;
-          break;
-        //endregion
-        //region GeneralString type
-
-        case 27:
-          newASN1Type = GeneralString;
-          break;
-        //endregion
-        //region UniversalString type
-
-        case 28:
-          newASN1Type = UniversalString;
-          break;
-        //endregion
-        //region CharacterString type
-
-        case 29:
-          newASN1Type = CharacterString;
-          break;
-        //endregion
-        //region BmpString type
-
-        case 30:
-          newASN1Type = BmpString;
-          break;
-        //endregion
-        //region DATE type
-
-        case 31:
-          newASN1Type = DATE;
-          break;
-        //endregion
-        //region TimeOfDay type
-
-        case 32:
-          newASN1Type = TimeOfDay;
-          break;
-        //endregion
-        //region Date-Time type
-
-        case 33:
-          newASN1Type = DateTime;
-          break;
-        //endregion
-        //region Duration type
-
-        case 34:
-          newASN1Type = Duration;
-          break;
-        //endregion
-        //region default
-
-        default:
-          {
-            let newObject;
-            if (returnObject.idBlock.isConstructed === true) newObject = new Constructed();else newObject = new Primitive();
-            newObject.idBlock = returnObject.idBlock;
-            newObject.lenBlock = returnObject.lenBlock;
-            newObject.warnings = returnObject.warnings;
-            returnObject = newObject;
-            resultOffset = returnObject.fromBER(inputBuffer, inputOffset, inputLength);
-          }
-        //endregion
-      }
-
-      break;
-    //endregion
-    //region All other tag classes
-
-    case 2: // APPLICATION
-
-    case 3: // CONTEXT-SPECIFIC
-
-    case 4: // PRIVATE
-
-    default:
-      {
-        if (returnObject.idBlock.isConstructed === true) newASN1Type = Constructed;else newASN1Type = Primitive;
-      }
-    //endregion
-  } //endregion
-  //region Change type and perform BER decoding
-
-
-  returnObject = localChangeType(returnObject, newASN1Type);
-  resultOffset = returnObject.fromBER(inputBuffer, inputOffset, returnObject.lenBlock.isIndefiniteForm === true ? inputLength : returnObject.lenBlock.length); //endregion
-  //region Coping incoming buffer for entire ASN.1 block
-
-  returnObject.valueBeforeDecode = inputBuffer.slice(incomingOffset, incomingOffset + returnObject.blockLength); //endregion
-
-  return {
-    offset: resultOffset,
-    result: returnObject
-  };
-} //**************************************************************************************
-
-/**
- * Major function for decoding ASN.1 BER array into internal library structuries
- * @param {!ArrayBuffer} inputBuffer ASN.1 BER encoded array of bytes
- */
-
-
-function fromBER(inputBuffer) {
-  if (inputBuffer.byteLength === 0) {
-    const result = new BaseBlock({}, Object);
-    result.error = "Input buffer has zero length";
-    return {
-      offset: -1,
-      result
-    };
-  }
-
-  return LocalFromBER(inputBuffer, 0, inputBuffer.byteLength);
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Major scheme verification function
-//**************************************************************************************
-
-/**
- * Compare of two ASN.1 object trees
- * @param {!Object} root Root of input ASN.1 object tree
- * @param {!Object} inputData Input ASN.1 object tree
- * @param {!Object} inputSchema Input ASN.1 schema to compare with
- * @return {{verified: boolean}|{verified:boolean, result: Object}}
- */
-
-
-function compareSchema(root, inputData, inputSchema) {
-  //region Special case for Choice schema element type
-  if (inputSchema instanceof Choice) {
-
-    for (let j = 0; j < inputSchema.value.length; j++) {
-      const result = compareSchema(root, inputData, inputSchema.value[j]);
-
-      if (result.verified === true) {
-        return {
-          verified: true,
-          result: root
-        };
-      }
-    }
-
-    {
-      const _result = {
-        verified: false,
-        result: {
-          error: "Wrong values for Choice type"
-        }
-      };
-      if (inputSchema.hasOwnProperty("name")) _result.name = inputSchema.name;
-      return _result;
-    }
-  } //endregion
-  //region Special case for Any schema element type
-
-
-  if (inputSchema instanceof Any) {
-    //region Add named component of ASN.1 schema
-    if (inputSchema.hasOwnProperty("name")) root[inputSchema.name] = inputData; //endregion
-
-    return {
-      verified: true,
-      result: root
-    };
-  } //endregion
-  //region Initial check
-
-
-  if (root instanceof Object === false) {
-    return {
-      verified: false,
-      result: {
-        error: "Wrong root object"
-      }
-    };
-  }
-
-  if (inputData instanceof Object === false) {
-    return {
-      verified: false,
-      result: {
-        error: "Wrong ASN.1 data"
-      }
-    };
-  }
-
-  if (inputSchema instanceof Object === false) {
-    return {
-      verified: false,
-      result: {
-        error: "Wrong ASN.1 schema"
-      }
-    };
-  }
-
-  if ("idBlock" in inputSchema === false) {
-    return {
-      verified: false,
-      result: {
-        error: "Wrong ASN.1 schema"
-      }
-    };
-  } //endregion
-  //region Comparing idBlock properties in ASN.1 data and ASN.1 schema
-  //region Encode and decode ASN.1 schema idBlock
-  /// <remarks>This encoding/decoding is neccessary because could be an errors in schema definition</remarks>
-
-
-  if ("fromBER" in inputSchema.idBlock === false) {
-    return {
-      verified: false,
-      result: {
-        error: "Wrong ASN.1 schema"
-      }
-    };
-  }
-
-  if ("toBER" in inputSchema.idBlock === false) {
-    return {
-      verified: false,
-      result: {
-        error: "Wrong ASN.1 schema"
-      }
-    };
-  }
-
-  const encodedId = inputSchema.idBlock.toBER(false);
-
-  if (encodedId.byteLength === 0) {
-    return {
-      verified: false,
-      result: {
-        error: "Error encoding idBlock for ASN.1 schema"
-      }
-    };
-  }
-
-  const decodedOffset = inputSchema.idBlock.fromBER(encodedId, 0, encodedId.byteLength);
-
-  if (decodedOffset === -1) {
-    return {
-      verified: false,
-      result: {
-        error: "Error decoding idBlock for ASN.1 schema"
-      }
-    };
-  } //endregion
-  //region tagClass
-
-
-  if (inputSchema.idBlock.hasOwnProperty("tagClass") === false) {
-    return {
-      verified: false,
-      result: {
-        error: "Wrong ASN.1 schema"
-      }
-    };
-  }
-
-  if (inputSchema.idBlock.tagClass !== inputData.idBlock.tagClass) {
-    return {
-      verified: false,
-      result: root
-    };
-  } //endregion
-  //region tagNumber
-
-
-  if (inputSchema.idBlock.hasOwnProperty("tagNumber") === false) {
-    return {
-      verified: false,
-      result: {
-        error: "Wrong ASN.1 schema"
-      }
-    };
-  }
-
-  if (inputSchema.idBlock.tagNumber !== inputData.idBlock.tagNumber) {
-    return {
-      verified: false,
-      result: root
-    };
-  } //endregion
-  //region isConstructed
-
-
-  if (inputSchema.idBlock.hasOwnProperty("isConstructed") === false) {
-    return {
-      verified: false,
-      result: {
-        error: "Wrong ASN.1 schema"
-      }
-    };
-  }
-
-  if (inputSchema.idBlock.isConstructed !== inputData.idBlock.isConstructed) {
-    return {
-      verified: false,
-      result: root
-    };
-  } //endregion
-  //region isHexOnly
-
-
-  if ("isHexOnly" in inputSchema.idBlock === false) // Since 'isHexOnly' is an inhirited property
-    {
-      return {
-        verified: false,
-        result: {
-          error: "Wrong ASN.1 schema"
-        }
-      };
-    }
-
-  if (inputSchema.idBlock.isHexOnly !== inputData.idBlock.isHexOnly) {
-    return {
-      verified: false,
-      result: root
-    };
-  } //endregion
-  //region valueHex
-
-
-  if (inputSchema.idBlock.isHexOnly === true) {
-    if ("valueHex" in inputSchema.idBlock === false) // Since 'valueHex' is an inhirited property
-      {
-        return {
-          verified: false,
-          result: {
-            error: "Wrong ASN.1 schema"
-          }
-        };
-      }
-
-    const schemaView = new Uint8Array(inputSchema.idBlock.valueHex);
-    const asn1View = new Uint8Array(inputData.idBlock.valueHex);
-
-    if (schemaView.length !== asn1View.length) {
-      return {
-        verified: false,
-        result: root
-      };
-    }
-
-    for (let i = 0; i < schemaView.length; i++) {
-      if (schemaView[i] !== asn1View[1]) {
-        return {
-          verified: false,
-          result: root
-        };
-      }
-    }
-  } //endregion
-  //endregion
-  //region Add named component of ASN.1 schema
-
-
-  if (inputSchema.hasOwnProperty("name")) {
-    inputSchema.name = inputSchema.name.replace(/^\s+|\s+$/g, "");
-    if (inputSchema.name !== "") root[inputSchema.name] = inputData;
-  } //endregion
-  //region Getting next ASN.1 block for comparition
-
-
-  if (inputSchema.idBlock.isConstructed === true) {
-    let admission = 0;
-    let result = {
-      verified: false
-    };
-    let maxLength = inputSchema.valueBlock.value.length;
-
-    if (maxLength > 0) {
-      if (inputSchema.valueBlock.value[0] instanceof Repeated) maxLength = inputData.valueBlock.value.length;
-    } //region Special case when constructive value has no elements
-
-
-    if (maxLength === 0) {
-      return {
-        verified: true,
-        result: root
-      };
-    } //endregion
-    //region Special case when "inputData" has no values and "inputSchema" has all optional values
-
-
-    if (inputData.valueBlock.value.length === 0 && inputSchema.valueBlock.value.length !== 0) {
-      let _optional = true;
-
-      for (let i = 0; i < inputSchema.valueBlock.value.length; i++) _optional = _optional && (inputSchema.valueBlock.value[i].optional || false);
-
-      if (_optional === true) {
-        return {
-          verified: true,
-          result: root
-        };
-      } //region Delete early added name of block
-
-
-      if (inputSchema.hasOwnProperty("name")) {
-        inputSchema.name = inputSchema.name.replace(/^\s+|\s+$/g, "");
-        if (inputSchema.name !== "") delete root[inputSchema.name];
-      } //endregion
-
-
-      root.error = "Inconsistent object length";
-      return {
-        verified: false,
-        result: root
-      };
-    } //endregion
-
-
-    for (let i = 0; i < maxLength; i++) {
-      //region Special case when there is an "optional" element of ASN.1 schema at the end
-      if (i - admission >= inputData.valueBlock.value.length) {
-        if (inputSchema.valueBlock.value[i].optional === false) {
-          const _result = {
-            verified: false,
-            result: root
-          };
-          root.error = "Inconsistent length between ASN.1 data and schema"; //region Delete early added name of block
-
-          if (inputSchema.hasOwnProperty("name")) {
-            inputSchema.name = inputSchema.name.replace(/^\s+|\s+$/g, "");
-
-            if (inputSchema.name !== "") {
-              delete root[inputSchema.name];
-              _result.name = inputSchema.name;
-            }
-          } //endregion
-
-
-          return _result;
-        }
-      } //endregion
-      else {
-          //region Special case for Repeated type of ASN.1 schema element
-          if (inputSchema.valueBlock.value[0] instanceof Repeated) {
-            result = compareSchema(root, inputData.valueBlock.value[i], inputSchema.valueBlock.value[0].value);
-
-            if (result.verified === false) {
-              if (inputSchema.valueBlock.value[0].optional === true) admission++;else {
-                //region Delete early added name of block
-                if (inputSchema.hasOwnProperty("name")) {
-                  inputSchema.name = inputSchema.name.replace(/^\s+|\s+$/g, "");
-                  if (inputSchema.name !== "") delete root[inputSchema.name];
-                } //endregion
-
-
-                return result;
-              }
-            }
-
-            if ("name" in inputSchema.valueBlock.value[0] && inputSchema.valueBlock.value[0].name.length > 0) {
-              let arrayRoot = {};
-              if ("local" in inputSchema.valueBlock.value[0] && inputSchema.valueBlock.value[0].local === true) arrayRoot = inputData;else arrayRoot = root;
-              if (typeof arrayRoot[inputSchema.valueBlock.value[0].name] === "undefined") arrayRoot[inputSchema.valueBlock.value[0].name] = [];
-              arrayRoot[inputSchema.valueBlock.value[0].name].push(inputData.valueBlock.value[i]);
-            }
-          } //endregion
-          else {
-              result = compareSchema(root, inputData.valueBlock.value[i - admission], inputSchema.valueBlock.value[i]);
-
-              if (result.verified === false) {
-                if (inputSchema.valueBlock.value[i].optional === true) admission++;else {
-                  //region Delete early added name of block
-                  if (inputSchema.hasOwnProperty("name")) {
-                    inputSchema.name = inputSchema.name.replace(/^\s+|\s+$/g, "");
-                    if (inputSchema.name !== "") delete root[inputSchema.name];
-                  } //endregion
-
-
-                  return result;
-                }
-              }
-            }
-        }
-    }
-
-    if (result.verified === false) // The situation may take place if last element is "optional" and verification failed
-      {
-        const _result = {
-          verified: false,
-          result: root
-        }; //region Delete early added name of block
-
-        if (inputSchema.hasOwnProperty("name")) {
-          inputSchema.name = inputSchema.name.replace(/^\s+|\s+$/g, "");
-
-          if (inputSchema.name !== "") {
-            delete root[inputSchema.name];
-            _result.name = inputSchema.name;
-          }
-        } //endregion
-
-
-        return _result;
-      }
-
-    return {
-      verified: true,
-      result: root
-    };
-  } //endregion
-  //region Ability to parse internal value for primitive-encoded value (value of OctetString, for example)
-
-
-  if ("primitiveSchema" in inputSchema && "valueHex" in inputData.valueBlock) {
-    //region Decoding of raw ASN.1 data
-    const asn1 = fromBER(inputData.valueBlock.valueHex);
-
-    if (asn1.offset === -1) {
-      const _result = {
-        verified: false,
-        result: asn1.result
-      }; //region Delete early added name of block
-
-      if (inputSchema.hasOwnProperty("name")) {
-        inputSchema.name = inputSchema.name.replace(/^\s+|\s+$/g, "");
-
-        if (inputSchema.name !== "") {
-          delete root[inputSchema.name];
-          _result.name = inputSchema.name;
-        }
-      } //endregion
-
-
-      return _result;
-    } //endregion
-
-
-    return compareSchema(root, asn1.result, inputSchema.primitiveSchema);
-  }
-
-  return {
-    verified: true,
-    result: root
-  }; //endregion
-} //**************************************************************************************
-//noinspection JSUnusedGlobalSymbols
-
-/**
- * ASN.1 schema verification for ArrayBuffer data
- * @param {!ArrayBuffer} inputBuffer Input BER-encoded ASN.1 data
- * @param {!Object} inputSchema Input ASN.1 schema to verify against to
- * @return {{verified: boolean}|{verified:boolean, result: Object}}
- */
-
-
-function verifySchema(inputBuffer, inputSchema) {
-  //region Initial check
-  if (inputSchema instanceof Object === false) {
-    return {
-      verified: false,
-      result: {
-        error: "Wrong ASN.1 schema type"
-      }
-    };
-  } //endregion
-  //region Decoding of raw ASN.1 data
-
-
-  const asn1 = fromBER(inputBuffer);
-
-  if (asn1.offset === -1) {
-    return {
-      verified: false,
-      result: asn1.result
-    };
-  } //endregion
-  //region Compare ASN.1 struct with input schema
-
-
-  return compareSchema(asn1.result, asn1.result, inputSchema); //endregion
-} //**************************************************************************************
-//endregion
-//**************************************************************************************
-//region Major function converting JSON to ASN.1 objects
-//**************************************************************************************
-//noinspection JSUnusedGlobalSymbols
-
-/**
- * Converting from JSON to ASN.1 objects
- * @param {string|Object} json JSON string or object to convert to ASN.1 objects
- */
-
-
-function fromJSON(json) {} // TODO Implement
-//**************************************************************************************
-//endregion
-//**************************************************************************************
-
-});
-
-unwrapExports(asn1);
-var asn1_1 = asn1.fromBER;
-var asn1_2 = asn1.compareSchema;
-var asn1_3 = asn1.verifySchema;
-var asn1_4 = asn1.fromJSON;
-var asn1_5 = asn1.RawData;
-var asn1_6 = asn1.Repeated;
-var asn1_7 = asn1.Any;
-var asn1_8 = asn1.Choice;
-var asn1_9 = asn1.TIME;
-var asn1_10 = asn1.Duration;
-var asn1_11 = asn1.DateTime;
-var asn1_12 = asn1.TimeOfDay;
-var asn1_13 = asn1.DATE;
-var asn1_14 = asn1.GeneralizedTime;
-var asn1_15 = asn1.UTCTime;
-var asn1_16 = asn1.CharacterString;
-var asn1_17 = asn1.GeneralString;
-var asn1_18 = asn1.VisibleString;
-var asn1_19 = asn1.GraphicString;
-var asn1_20 = asn1.IA5String;
-var asn1_21 = asn1.VideotexString;
-var asn1_22 = asn1.TeletexString;
-var asn1_23 = asn1.PrintableString;
-var asn1_24 = asn1.NumericString;
-var asn1_25 = asn1.UniversalString;
-var asn1_26 = asn1.BmpString;
-var asn1_27 = asn1.RelativeObjectIdentifier;
-var asn1_28 = asn1.Utf8String;
-var asn1_29 = asn1.ObjectIdentifier;
-var asn1_30 = asn1.Enumerated;
-var asn1_31 = asn1.Integer;
-var asn1_32 = asn1.BitString;
-var asn1_33 = asn1.OctetString;
-var asn1_34 = asn1.Null;
-var asn1_35 = asn1.Set;
-var asn1_36 = asn1.Sequence;
-var asn1_37 = asn1.Boolean;
-var asn1_38 = asn1.EndOfContent;
-var asn1_39 = asn1.Constructed;
-var asn1_40 = asn1.Primitive;
-var asn1_41 = asn1.BaseBlock;
-var asn1_42 = asn1.ValueBlock;
-var asn1_43 = asn1.HexBlock;
+import { Any, Sequence, ObjectIdentifier, compareSchema, RawData, Integer, BitString, fromBER, Null, Set, Repeated, OctetString, Constructed, Choice, Primitive, Utf8String, BmpString, UniversalString, NumericString, PrintableString, TeletexString, VideotexString, IA5String, GraphicString, VisibleString, GeneralString, CharacterString, UTCTime, GeneralizedTime, Boolean, Enumerated } from '../asn1js/asn1.js';
+import { getParametersValue, clearProps, isEqualBuffer, utilConcatBuf, toBase64, arrayBufferToString, stringToArrayBuffer, fromBase64, nearestPowerOf2, utilFromBase, utilToBase, bufferToHexCodes } from '../pvutils/utils.js';
+import { SeqStream, ByteStream } from '../bytestreamjs/bytestream.js';
 
 //**************************************************************************************
 /**
@@ -6620,7 +49,7 @@ class AlgorithmIdentifier
 			case "algorithmId":
 				return "";
 			case "algorithmParams":
-				return new asn1_7();
+				return new Any();
 			default:
 				throw new Error(`Invalid member name for AlgorithmIdentifier class: ${memberName}`);
 		}
@@ -6638,7 +67,7 @@ class AlgorithmIdentifier
 			case "algorithmId":
 				return (memberValue === "");
 			case "algorithmParams":
-				return (memberValue instanceof asn1_7);
+				return (memberValue instanceof Any);
 			default:
 				throw new Error(`Invalid member name for AlgorithmIdentifier class: ${memberName}`);
 		}
@@ -6666,12 +95,12 @@ class AlgorithmIdentifier
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			optional: (names.optional || false),
 			value: [
-				new asn1_29({ name: (names.algorithmIdentifier || "") }),
-				new asn1_7({ name: (names.algorithmParams || ""), optional: true })
+				new ObjectIdentifier({ name: (names.algorithmIdentifier || "") }),
+				new Any({ name: (names.algorithmParams || ""), optional: true })
 			]
 		}));
 	}
@@ -6690,7 +119,7 @@ class AlgorithmIdentifier
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			AlgorithmIdentifier.schema({
 				names: {
@@ -6720,13 +149,13 @@ class AlgorithmIdentifier
 		//region Create array for output sequence
 		const outputArray = [];
 		
-		outputArray.push(new asn1_29({ value: this.algorithmId }));
-		if(("algorithmParams" in this) && ((this.algorithmParams instanceof asn1_7) === false))
+		outputArray.push(new ObjectIdentifier({ value: this.algorithmId }));
+		if(("algorithmParams" in this) && ((this.algorithmParams instanceof Any) === false))
 			outputArray.push(this.algorithmParams);
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -6742,7 +171,7 @@ class AlgorithmIdentifier
 			algorithmId: this.algorithmId
 		};
 
-		if(("algorithmParams" in this) && ((this.algorithmParams instanceof asn1_7) === false))
+		if(("algorithmParams" in this) && ((this.algorithmParams instanceof Any) === false))
 			object.algorithmParams = this.algorithmParams.toJSON();
 
 		return object;
@@ -6870,7 +299,7 @@ class ECPublicKey
 	 */
 	static schema(parameters = {})
 	{
-		return new asn1_5();
+		return new RawData();
 	}
 	//**********************************************************************************
 	/**
@@ -6920,7 +349,7 @@ class ECPublicKey
 	 */
 	toSchema()
 	{
-		return new asn1_5({ data: utilConcatBuf(
+		return new RawData({ data: utilConcatBuf(
 			(new Uint8Array([0x04])).buffer,
 			this.x,
 			this.y
@@ -7071,9 +500,9 @@ class RSAPublicKey
 		switch(memberName)
 		{
 			case "modulus":
-				return new asn1_31();
+				return new Integer();
 			case "publicExponent":
-				return new asn1_31();
+				return new Integer();
 			default:
 				throw new Error(`Invalid member name for RSAPublicKey class: ${memberName}`);
 		}
@@ -7102,11 +531,11 @@ class RSAPublicKey
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.modulus || "") }),
-				new asn1_31({ name: (names.publicExponent || "") })
+				new Integer({ name: (names.modulus || "") }),
+				new Integer({ name: (names.publicExponent || "") })
 			]
 		}));
 	}
@@ -7125,7 +554,7 @@ class RSAPublicKey
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			RSAPublicKey.schema({
 				names: {
@@ -7152,7 +581,7 @@ class RSAPublicKey
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				this.modulus.convertToDER(),
 				this.publicExponent
@@ -7182,13 +611,13 @@ class RSAPublicKey
 		if("n" in json)
 		{
 			const array = stringToArrayBuffer(fromBase64(json.n, true));
-			this.modulus = new asn1_31({ valueHex: array.slice(0, Math.pow(2, nearestPowerOf2(array.byteLength))) });
+			this.modulus = new Integer({ valueHex: array.slice(0, Math.pow(2, nearestPowerOf2(array.byteLength))) });
 		}
 		else
 			throw new Error("Absent mandatory parameter \"n\"");
 
 		if("e" in json)
-			this.publicExponent = new asn1_31({ valueHex: stringToArrayBuffer(fromBase64(json.e, true)).slice(0, 3) });
+			this.publicExponent = new Integer({ valueHex: stringToArrayBuffer(fromBase64(json.e, true)).slice(0, 3) });
 		else
 			throw new Error("Absent mandatory parameter \"e\"");
 	}
@@ -7251,7 +680,7 @@ class PublicKeyInfo
 			case "algorithm":
 				return new AlgorithmIdentifier();
 			case "subjectPublicKey":
-				return new asn1_32();
+				return new BitString();
 			default:
 				throw new Error(`Invalid member name for PublicKeyInfo class: ${memberName}`);
 		}
@@ -7280,11 +709,11 @@ class PublicKeyInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				AlgorithmIdentifier.schema(names.algorithm || {}),
-				new asn1_32({ name: (names.subjectPublicKey || "") })
+				new BitString({ name: (names.subjectPublicKey || "") })
 			]
 		}));
 	}
@@ -7303,7 +732,7 @@ class PublicKeyInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PublicKeyInfo.schema({
 				names: {
@@ -7330,7 +759,7 @@ class PublicKeyInfo
 			case "1.2.840.10045.2.1": // ECDSA
 				if("algorithmParams" in this.algorithm)
 				{
-					if(this.algorithm.algorithmParams.constructor.blockName() === asn1_29.blockName())
+					if(this.algorithm.algorithmParams.constructor.blockName() === ObjectIdentifier.blockName())
 					{
 						try
 						{
@@ -7345,7 +774,7 @@ class PublicKeyInfo
 				break;
 			case "1.2.840.113549.1.1.1": // RSA
 				{
-					const publicKeyASN1 = asn1_1(this.subjectPublicKey.valueBlock.valueHex);
+					const publicKeyASN1 = fromBER(this.subjectPublicKey.valueBlock.valueHex);
 					if(publicKeyASN1.offset !== (-1))
 					{
 						try
@@ -7367,7 +796,7 @@ class PublicKeyInfo
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				this.algorithm.toSchema(),
 				this.subjectPublicKey
@@ -7429,7 +858,7 @@ class PublicKeyInfo
 					
 					this.algorithm = new AlgorithmIdentifier({
 						algorithmId: "1.2.840.10045.2.1",
-						algorithmParams: new asn1_29({ value: this.parsedKey.namedCurve })
+						algorithmParams: new ObjectIdentifier({ value: this.parsedKey.namedCurve })
 					});
 					break;
 				case "RSA":
@@ -7437,14 +866,14 @@ class PublicKeyInfo
 					
 					this.algorithm = new AlgorithmIdentifier({
 						algorithmId: "1.2.840.113549.1.1.1",
-						algorithmParams: new asn1_34()
+						algorithmParams: new Null()
 					});
 					break;
 				default:
 					throw new Error(`Invalid value for "kty" parameter: ${json.kty}`);
 			}
 			
-			this.subjectPublicKey = new asn1_32({ valueHex: this.parsedKey.toSchema().toBER(false) });
+			this.subjectPublicKey = new BitString({ valueHex: this.parsedKey.toSchema().toBER(false) });
 		}
 	}
 	//**********************************************************************************
@@ -7478,7 +907,7 @@ class PublicKeyInfo
 			 */
 			exportedKey =>
 			{
-				const asn1 = asn1_1(exportedKey);
+				const asn1 = fromBER(exportedKey);
 				try
 				{
 					_this.fromSchema(asn1.result);
@@ -7592,16 +1021,16 @@ class Attribute {
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.type || "") }),
-				new asn1_35({
+				new ObjectIdentifier({ name: (names.type || "") }),
+				new Set({
 					name: (names.setName || ""),
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.values || ""),
-							value: new asn1_7()
+							value: new Any()
 						})
 					]
 				})
@@ -7623,7 +1052,7 @@ class Attribute {
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			Attribute.schema({
 				names: {
@@ -7650,10 +1079,10 @@ class Attribute {
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_29({ value: this.type }),
-				new asn1_35({
+				new ObjectIdentifier({ value: this.type }),
+				new Set({
 					value: this.values
 				})
 			]
@@ -7738,7 +1167,7 @@ class ECPrivateKey
 			case "version":
 				return 1;
 			case "privateKey":
-				return new asn1_33();
+				return new OctetString();
 			case "namedCurve":
 				return "";
 			case "publicKey":
@@ -7800,29 +1229,29 @@ class ECPrivateKey
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.version || "") }),
-				new asn1_33({ name: (names.privateKey || "") }),
-				new asn1_39({
+				new Integer({ name: (names.version || "") }),
+				new OctetString({ name: (names.privateKey || "") }),
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
 					value: [
-						new asn1_29({ name: (names.namedCurve || "") })
+						new ObjectIdentifier({ name: (names.namedCurve || "") })
 					]
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
 					},
 					value: [
-						new asn1_32({ name: (names.publicKey || "") })
+						new BitString({ name: (names.publicKey || "") })
 					]
 				})
 			]
@@ -7845,7 +1274,7 @@ class ECPrivateKey
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			ECPrivateKey.schema({
 				names: {
@@ -7886,37 +1315,37 @@ class ECPrivateKey
 	toSchema()
 	{
 		const outputArray = [
-			new asn1_31({ value: this.version }),
+			new Integer({ value: this.version }),
 			this.privateKey
 		];
 
 		if("namedCurve" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
 				},
 				value: [
-					new asn1_29({ value: this.namedCurve })
+					new ObjectIdentifier({ value: this.namedCurve })
 				]
 			}));
 		}
 
 		if("publicKey" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 1 // [1]
 				},
 				value: [
-					new asn1_32({ valueHex: this.publicKey.toSchema().toBER(false) })
+					new BitString({ valueHex: this.publicKey.toSchema().toBER(false) })
 				]
 			}));
 		}
 
-		return new asn1_36({
+		return new Sequence({
 			value: outputArray
 		});
 	}
@@ -8001,10 +1430,10 @@ class ECPrivateKey
 				const convertBufferView = new Uint8Array(convertBuffer);
 				view.set(convertBufferView, 1);
 				
-				this.privateKey = new asn1_33({ valueHex: buffer });
+				this.privateKey = new OctetString({ valueHex: buffer });
 			}
 			else
-				this.privateKey = new asn1_33({ valueHex: convertBuffer.slice(0, coodinateLength) });
+				this.privateKey = new OctetString({ valueHex: convertBuffer.slice(0, coodinateLength) });
 		}
 		else
 			throw new Error("Absent mandatory parameter \"d\"");
@@ -8067,11 +1496,11 @@ class OtherPrimeInfo
 		switch(memberName)
 		{
 			case "prime":
-				return new asn1_31();
+				return new Integer();
 			case "exponent":
-				return new asn1_31();
+				return new Integer();
 			case "coefficient":
-				return new asn1_31();
+				return new Integer();
 			default:
 				throw new Error(`Invalid member name for OtherPrimeInfo class: ${memberName}`);
 		}
@@ -8103,12 +1532,12 @@ class OtherPrimeInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.prime || "") }),
-				new asn1_31({ name: (names.exponent || "") }),
-				new asn1_31({ name: (names.coefficient || "") })
+				new Integer({ name: (names.prime || "") }),
+				new Integer({ name: (names.exponent || "") }),
+				new Integer({ name: (names.coefficient || "") })
 			]
 		}));
 	}
@@ -8128,7 +1557,7 @@ class OtherPrimeInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			OtherPrimeInfo.schema({
 				names: {
@@ -8157,7 +1586,7 @@ class OtherPrimeInfo
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				this.prime.convertToDER(),
 				this.exponent.convertToDER(),
@@ -8187,17 +1616,17 @@ class OtherPrimeInfo
 	fromJSON(json)
 	{
 		if("r" in json)
-			this.prime = new asn1_31({ valueHex: stringToArrayBuffer(fromBase64(json.r, true)) });
+			this.prime = new Integer({ valueHex: stringToArrayBuffer(fromBase64(json.r, true)) });
 		else
 			throw new Error("Absent mandatory parameter \"r\"");
 
 		if("d" in json)
-			this.exponent = new asn1_31({ valueHex: stringToArrayBuffer(fromBase64(json.d, true)) });
+			this.exponent = new Integer({ valueHex: stringToArrayBuffer(fromBase64(json.d, true)) });
 		else
 			throw new Error("Absent mandatory parameter \"d\"");
 
 		if("t" in json)
-			this.coefficient = new asn1_31({ valueHex: stringToArrayBuffer(fromBase64(json.t, true)) });
+			this.coefficient = new Integer({ valueHex: stringToArrayBuffer(fromBase64(json.t, true)) });
 		else
 			throw new Error("Absent mandatory parameter \"t\"");
 	}
@@ -8295,21 +1724,21 @@ class RSAPrivateKey
 			case "version":
 				return 0;
 			case "modulus":
-				return new asn1_31();
+				return new Integer();
 			case "publicExponent":
-				return new asn1_31();
+				return new Integer();
 			case "privateExponent":
-				return new asn1_31();
+				return new Integer();
 			case "prime1":
-				return new asn1_31();
+				return new Integer();
 			case "prime2":
-				return new asn1_31();
+				return new Integer();
 			case "exponent1":
-				return new asn1_31();
+				return new Integer();
 			case "exponent2":
-				return new asn1_31();
+				return new Integer();
 			case "coefficient":
-				return new asn1_31();
+				return new Integer();
 			case "otherPrimeInfos":
 				return [];
 			default:
@@ -8360,22 +1789,22 @@ class RSAPrivateKey
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.version || "") }),
-				new asn1_31({ name: (names.modulus || "") }),
-				new asn1_31({ name: (names.publicExponent || "") }),
-				new asn1_31({ name: (names.privateExponent || "") }),
-				new asn1_31({ name: (names.prime1 || "") }),
-				new asn1_31({ name: (names.prime2 || "") }),
-				new asn1_31({ name: (names.exponent1 || "") }),
-				new asn1_31({ name: (names.exponent2 || "") }),
-				new asn1_31({ name: (names.coefficient || "") }),
-				new asn1_36({
+				new Integer({ name: (names.version || "") }),
+				new Integer({ name: (names.modulus || "") }),
+				new Integer({ name: (names.publicExponent || "") }),
+				new Integer({ name: (names.privateExponent || "") }),
+				new Integer({ name: (names.prime1 || "") }),
+				new Integer({ name: (names.prime2 || "") }),
+				new Integer({ name: (names.exponent1 || "") }),
+				new Integer({ name: (names.exponent2 || "") }),
+				new Integer({ name: (names.coefficient || "") }),
+				new Sequence({
 					optional: true,
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.otherPrimeInfosName || ""),
 							value: OtherPrimeInfo.schema(names.otherPrimeInfo || {})
 						})
@@ -8407,7 +1836,7 @@ class RSAPrivateKey
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			RSAPrivateKey.schema({
 				names: {
@@ -8458,7 +1887,7 @@ class RSAPrivateKey
 		//region Create array for output sequence
 		const outputArray = [];
 		
-		outputArray.push(new asn1_31({ value: this.version }));
+		outputArray.push(new Integer({ value: this.version }));
 		outputArray.push(this.modulus.convertToDER());
 		outputArray.push(this.publicExponent);
 		outputArray.push(this.privateExponent.convertToDER());
@@ -8470,14 +1899,14 @@ class RSAPrivateKey
 		
 		if("otherPrimeInfos" in this)
 		{
-			outputArray.push(new asn1_36({
+			outputArray.push(new Sequence({
 				value: Array.from(this.otherPrimeInfos, element => element.toSchema())
 			}));
 		}
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -8513,42 +1942,42 @@ class RSAPrivateKey
 	fromJSON(json)
 	{
 		if("n" in json)
-			this.modulus = new asn1_31({ valueHex: stringToArrayBuffer(fromBase64(json.n, true, true)) });
+			this.modulus = new Integer({ valueHex: stringToArrayBuffer(fromBase64(json.n, true, true)) });
 		else
 			throw new Error("Absent mandatory parameter \"n\"");
 
 		if("e" in json)
-			this.publicExponent = new asn1_31({ valueHex: stringToArrayBuffer(fromBase64(json.e, true, true)) });
+			this.publicExponent = new Integer({ valueHex: stringToArrayBuffer(fromBase64(json.e, true, true)) });
 		else
 			throw new Error("Absent mandatory parameter \"e\"");
 
 		if("d" in json)
-			this.privateExponent = new asn1_31({ valueHex: stringToArrayBuffer(fromBase64(json.d, true, true)) });
+			this.privateExponent = new Integer({ valueHex: stringToArrayBuffer(fromBase64(json.d, true, true)) });
 		else
 			throw new Error("Absent mandatory parameter \"d\"");
 
 		if("p" in json)
-			this.prime1 = new asn1_31({ valueHex: stringToArrayBuffer(fromBase64(json.p, true, true)) });
+			this.prime1 = new Integer({ valueHex: stringToArrayBuffer(fromBase64(json.p, true, true)) });
 		else
 			throw new Error("Absent mandatory parameter \"p\"");
 
 		if("q" in json)
-			this.prime2 = new asn1_31({ valueHex: stringToArrayBuffer(fromBase64(json.q, true, true)) });
+			this.prime2 = new Integer({ valueHex: stringToArrayBuffer(fromBase64(json.q, true, true)) });
 		else
 			throw new Error("Absent mandatory parameter \"q\"");
 
 		if("dp" in json)
-			this.exponent1 = new asn1_31({ valueHex: stringToArrayBuffer(fromBase64(json.dp, true, true)) });
+			this.exponent1 = new Integer({ valueHex: stringToArrayBuffer(fromBase64(json.dp, true, true)) });
 		else
 			throw new Error("Absent mandatory parameter \"dp\"");
 
 		if("dq" in json)
-			this.exponent2 = new asn1_31({ valueHex: stringToArrayBuffer(fromBase64(json.dq, true, true)) });
+			this.exponent2 = new Integer({ valueHex: stringToArrayBuffer(fromBase64(json.dq, true, true)) });
 		else
 			throw new Error("Absent mandatory parameter \"dq\"");
 
 		if("qi" in json)
-			this.coefficient = new asn1_31({ valueHex: stringToArrayBuffer(fromBase64(json.qi, true, true)) });
+			this.coefficient = new Integer({ valueHex: stringToArrayBuffer(fromBase64(json.qi, true, true)) });
 		else
 			throw new Error("Absent mandatory parameter \"qi\"");
 
@@ -8628,7 +2057,7 @@ class PrivateKeyInfo
 			case "privateKeyAlgorithm":
 				return new AlgorithmIdentifier();
 			case "privateKey":
-				return new asn1_33();
+				return new OctetString();
 			case "attributes":
 				return [];
 			case "parsedKey":
@@ -8671,20 +2100,20 @@ class PrivateKeyInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.version || "") }),
+				new Integer({ name: (names.version || "") }),
 				AlgorithmIdentifier.schema(names.privateKeyAlgorithm || {}),
-				new asn1_33({ name: (names.privateKey || "") }),
-				new asn1_39({
+				new OctetString({ name: (names.privateKey || "") }),
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.attributes || ""),
 							value: Attribute.schema()
 						})
@@ -8710,7 +2139,7 @@ class PrivateKeyInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PrivateKeyInfo.schema({
 				names: {
@@ -8742,7 +2171,7 @@ class PrivateKeyInfo
 		{
 			case "1.2.840.113549.1.1.1": // RSA
 				{
-					const privateKeyASN1 = asn1_1(this.privateKey.valueBlock.valueHex);
+					const privateKeyASN1 = fromBER(this.privateKey.valueBlock.valueHex);
 					if(privateKeyASN1.offset !== (-1))
 						this.parsedKey = new RSAPrivateKey({ schema: privateKeyASN1.result });
 				}
@@ -8750,9 +2179,9 @@ class PrivateKeyInfo
 			case "1.2.840.10045.2.1": // ECDSA
 				if("algorithmParams" in this.privateKeyAlgorithm)
 				{
-					if(this.privateKeyAlgorithm.algorithmParams instanceof asn1_29)
+					if(this.privateKeyAlgorithm.algorithmParams instanceof ObjectIdentifier)
 					{
-						const privateKeyASN1 = asn1_1(this.privateKey.valueBlock.valueHex);
+						const privateKeyASN1 = fromBER(this.privateKey.valueBlock.valueHex);
 						if(privateKeyASN1.offset !== (-1))
 						{
 							this.parsedKey = new ECPrivateKey({
@@ -8775,14 +2204,14 @@ class PrivateKeyInfo
 	{
 		//region Create array for output sequence
 		const outputArray = [
-			new asn1_31({ value: this.version }),
+			new Integer({ value: this.version }),
 			this.privateKeyAlgorithm.toSchema(),
 			this.privateKey
 		];
 
 		if("attributes" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -8794,7 +2223,7 @@ class PrivateKeyInfo
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -8859,7 +2288,7 @@ class PrivateKeyInfo
 
 					this.privateKeyAlgorithm = new AlgorithmIdentifier({
 						algorithmId: "1.2.840.10045.2.1",
-						algorithmParams: new asn1_29({ value: this.parsedKey.namedCurve })
+						algorithmParams: new ObjectIdentifier({ value: this.parsedKey.namedCurve })
 					});
 					break;
 				case "RSA":
@@ -8867,14 +2296,14 @@ class PrivateKeyInfo
 
 					this.privateKeyAlgorithm = new AlgorithmIdentifier({
 						algorithmId: "1.2.840.113549.1.1.1",
-						algorithmParams: new asn1_34()
+						algorithmParams: new Null()
 					});
 					break;
 				default:
 					throw new Error(`Invalid value for "kty" parameter: ${json.kty}`);
 			}
 
-			this.privateKey = new asn1_33({ valueHex: this.parsedKey.toSchema().toBER(false) });
+			this.privateKey = new OctetString({ valueHex: this.parsedKey.toSchema().toBER(false) });
 		}
 	}
 	//**********************************************************************************
@@ -8921,7 +2350,7 @@ class EncryptedContentInfo
 				//region Divide OCTETSTRING value down to small pieces
 				if(this.encryptedContent.idBlock.isConstructed === false)
 				{
-					const constrString = new asn1_33({
+					const constrString = new OctetString({
 						idBlock: { isConstructed: true },
 						isConstructed: true
 					});
@@ -8938,7 +2367,7 @@ class EncryptedContentInfo
 						for(let i = 0; i < _view.length; i++)
 							_view[i] = pieceView[i];
 						
-						constrString.valueBlock.value.push(new asn1_33({ valueHex: _array }));
+						constrString.valueBlock.value.push(new OctetString({ valueHex: _array }));
 						
 						length -= pieceView.length;
 						offset += pieceView.length;
@@ -8970,7 +2399,7 @@ class EncryptedContentInfo
 			case "contentEncryptionAlgorithm":
 				return new AlgorithmIdentifier();
 			case "encryptedContent":
-				return new asn1_33();
+				return new OctetString();
 			default:
 				throw new Error(`Invalid member name for EncryptedContentInfo class: ${memberName}`);
 		}
@@ -9025,28 +2454,28 @@ class EncryptedContentInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.contentType || "") }),
+				new ObjectIdentifier({ name: (names.contentType || "") }),
 				AlgorithmIdentifier.schema(names.contentEncryptionAlgorithm || {}),
 				// The CHOICE we need because "EncryptedContent" could have either "constructive"
 				// or "primitive" form of encoding and we need to handle both variants
-				new asn1_8({
+				new Choice({
 					value: [
-						new asn1_39({
+						new Constructed({
 							name: (names.encryptedContent || ""),
 							idBlock: {
 								tagClass: 3, // CONTEXT-SPECIFIC
 								tagNumber: 0 // [0]
 							},
 							value: [
-								new asn1_6({
-									value: new asn1_33()
+								new Repeated({
+									value: new OctetString()
 								})
 							]
 						}),
-						new asn1_40({
+						new Primitive({
 							name: (names.encryptedContent || ""),
 							idBlock: {
 								tagClass: 3, // CONTEXT-SPECIFIC
@@ -9074,7 +2503,7 @@ class EncryptedContentInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			EncryptedContentInfo.schema({
 				names: {
@@ -9120,7 +2549,7 @@ class EncryptedContentInfo
 
 		const outputArray = [];
 
-		outputArray.push(new asn1_29({ value: this.contentType }));
+		outputArray.push(new ObjectIdentifier({ value: this.contentType }));
 		outputArray.push(this.contentEncryptionAlgorithm.toSchema());
 
 		if("encryptedContent" in this)
@@ -9139,7 +2568,7 @@ class EncryptedContentInfo
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			lenBlock: sequenceLengthBlock,
 			value: outputArray
 		}));
@@ -9220,14 +2649,14 @@ class RSASSAPSSParams
 			case "hashAlgorithm":
 				return new AlgorithmIdentifier({
 					algorithmId: "1.3.14.3.2.26", // SHA-1
-					algorithmParams: new asn1_34()
+					algorithmParams: new Null()
 				});
 			case "maskGenAlgorithm":
 				return new AlgorithmIdentifier({
 					algorithmId: "1.2.840.113549.1.1.8", // MGF1
 					algorithmParams: (new AlgorithmIdentifier({
 						algorithmId: "1.3.14.3.2.26", // SHA-1
-						algorithmParams: new asn1_34()
+						algorithmParams: new Null()
 					})).toSchema()
 				});
 			case "saltLength":
@@ -9266,10 +2695,10 @@ class RSASSAPSSParams
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_39({
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
@@ -9277,7 +2706,7 @@ class RSASSAPSSParams
 					optional: true,
 					value: [AlgorithmIdentifier.schema(names.hashAlgorithm || {})]
 				}),
-				new asn1_39({
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
@@ -9285,21 +2714,21 @@ class RSASSAPSSParams
 					optional: true,
 					value: [AlgorithmIdentifier.schema(names.maskGenAlgorithm || {})]
 				}),
-				new asn1_39({
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 2 // [2]
 					},
 					optional: true,
-					value: [new asn1_31({ name: (names.saltLength || "") })]
+					value: [new Integer({ name: (names.saltLength || "") })]
 				}),
-				new asn1_39({
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 3 // [3]
 					},
 					optional: true,
-					value: [new asn1_31({ name: (names.trailerField || "") })]
+					value: [new Integer({ name: (names.trailerField || "") })]
 				})
 			]
 		}));
@@ -9321,7 +2750,7 @@ class RSASSAPSSParams
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			RSASSAPSSParams.schema({
 				names: {
@@ -9371,7 +2800,7 @@ class RSASSAPSSParams
 		
 		if(!this.hashAlgorithm.isEqual(RSASSAPSSParams.defaultValues("hashAlgorithm")))
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -9382,7 +2811,7 @@ class RSASSAPSSParams
 		
 		if(!this.maskGenAlgorithm.isEqual(RSASSAPSSParams.defaultValues("maskGenAlgorithm")))
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 1 // [1]
@@ -9393,29 +2822,29 @@ class RSASSAPSSParams
 		
 		if(this.saltLength !== RSASSAPSSParams.defaultValues("saltLength"))
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 2 // [2]
 				},
-				value: [new asn1_31({ value: this.saltLength })]
+				value: [new Integer({ value: this.saltLength })]
 			}));
 		}
 		
 		if(this.trailerField !== RSASSAPSSParams.defaultValues("trailerField"))
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 3 // [3]
 				},
-				value: [new asn1_31({ value: this.trailerField })]
+				value: [new Integer({ value: this.trailerField })]
 			}));
 		}
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -9511,7 +2940,7 @@ class PBKDF2Params
 			case "prf":
 				return new AlgorithmIdentifier({
 					algorithmId: "1.3.14.3.2.26", // SHA-1
-					algorithmParams: new asn1_34()
+					algorithmParams: new Null()
 				});
 			default:
 				throw new Error(`Invalid member name for PBKDF2Params class: ${memberName}`);
@@ -9549,17 +2978,17 @@ class PBKDF2Params
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_8({
+				new Choice({
 					value: [
-						new asn1_33({ name: (names.saltPrimitive || "") }),
+						new OctetString({ name: (names.saltPrimitive || "") }),
 						AlgorithmIdentifier.schema(names.saltConstructed || {})
 					]
 				}),
-				new asn1_31({ name: (names.iterationCount || "") }),
-				new asn1_31({
+				new Integer({ name: (names.iterationCount || "") }),
+				new Integer({
 					name: (names.keyLength || ""),
 					optional: true
 				}),
@@ -9588,7 +3017,7 @@ class PBKDF2Params
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PBKDF2Params.schema({
 				names: {
@@ -9636,12 +3065,12 @@ class PBKDF2Params
 		const outputArray = [];
 		
 		outputArray.push(this.salt);
-		outputArray.push(new asn1_31({ value: this.iterationCount }));
+		outputArray.push(new Integer({ value: this.iterationCount }));
 		
 		if("keyLength" in this)
 		{
 			if(PBKDF2Params.defaultValues("keyLength") !== this.keyLength)
-				outputArray.push(new asn1_31({ value: this.keyLength }));
+				outputArray.push(new Integer({ value: this.keyLength }));
 		}
 		
 		if("prf" in this)
@@ -9652,7 +3081,7 @@ class PBKDF2Params
 		//endregion 
 		
 		//region Construct and return new ASN.1 schema for this object 
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion 
@@ -9760,7 +3189,7 @@ class PBES2Params
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				AlgorithmIdentifier.schema(names.keyDerivationFunc || {}),
@@ -9783,7 +3212,7 @@ class PBES2Params
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PBES2Params.schema({
 				names: {
@@ -9818,7 +3247,7 @@ class PBES2Params
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				this.keyDerivationFunc.toSchema(),
 				this.encryptionScheme.toSchema()
@@ -10094,7 +3523,7 @@ class CryptoEngine
 				return this.subtle.importKey("raw", keyData, algorithm, extractable, keyUsages);
 			case "spki":
 				{
-					const asn1 = asn1_1(keyData);
+					const asn1 = fromBER(keyData);
 					if(asn1.offset === (-1))
 						return Promise.reject("Incorrect keyData");
 
@@ -10250,7 +3679,7 @@ class CryptoEngine
 					const privateKeyInfo = new PrivateKeyInfo();
 
 					//region Parse "PrivateKeyInfo" object
-					const asn1 = asn1_1(keyData);
+					const asn1 = fromBER(keyData);
 					if(asn1.offset === (-1))
 						return Promise.reject("Incorrect keyData");
 
@@ -11666,11 +5095,11 @@ class CryptoEngine
 		const contentView = new Uint8Array(parameters.contentToEncrypt);
 		
 		const pbkdf2Params = new PBKDF2Params({
-			salt: new asn1_33({ valueHex: saltBuffer }),
+			salt: new OctetString({ valueHex: saltBuffer }),
 			iterationCount: parameters.iterationCount,
 			prf: new AlgorithmIdentifier({
 				algorithmId: hmacOID,
-				algorithmParams: new asn1_34()
+				algorithmParams: new Null()
 			})
 		});
 		//endregion
@@ -11732,7 +5161,7 @@ class CryptoEngine
 				}),
 				encryptionScheme: new AlgorithmIdentifier({
 					algorithmId: contentEncryptionOID,
-					algorithmParams: new asn1_33({ valueHex: ivBuffer })
+					algorithmParams: new OctetString({ valueHex: ivBuffer })
 				})
 			});
 			
@@ -11742,7 +5171,7 @@ class CryptoEngine
 					algorithmId: "1.2.840.113549.1.5.13", // pkcs5PBES2
 					algorithmParams: pbes2Parameters.toSchema()
 				}),
-				encryptedContent: new asn1_33({ valueHex: result })
+				encryptedContent: new OctetString({ valueHex: result })
 			});
 		}, error =>
 			Promise.reject(error)
@@ -12113,7 +5542,7 @@ class CryptoEngine
 						
 						paramsObject.hashAlgorithm = new AlgorithmIdentifier({
 							algorithmId: hashAlgorithmOID,
-							algorithmParams: new asn1_34()
+							algorithmParams: new Null()
 						});
 						
 						paramsObject.maskGenAlgorithm = new AlgorithmIdentifier({
@@ -12329,7 +5758,7 @@ class CryptoEngine
 			
 			if(publicKey.algorithm.name === "ECDSA")
 			{
-				const asn1 = asn1_1(signatureValue);
+				const asn1 = fromBER(signatureValue);
 				// noinspection JSCheckFunctionSignatures
 				signatureValue = createECDSASignatureFromCMS(asn1.result);
 			}
@@ -12600,16 +6029,16 @@ function createCMSECDSASignature(signatureBuffer)
 	const rView = new Uint8Array(rBuffer);
 	rView.set(new Uint8Array(signatureBuffer, 0, length));
 	
-	const rInteger = new asn1_31({ valueHex: rBuffer });
+	const rInteger = new Integer({ valueHex: rBuffer });
 	
 	const sBuffer = new ArrayBuffer(length);
 	const sView = new Uint8Array(sBuffer);
 	sView.set(new Uint8Array(signatureBuffer, length, length));
 	
-	const sInteger = new asn1_31({ valueHex: sBuffer });
+	const sInteger = new Integer({ valueHex: sBuffer });
 	//endregion
 	
-	return (new asn1_36({
+	return (new Sequence({
 		value: [
 			rInteger.convertToDER(),
 			sInteger.convertToDER()
@@ -12663,16 +6092,16 @@ function stringPrep(inputString)
 function createECDSASignatureFromCMS(cmsSignature)
 {
 	//region Check input variables
-	if((cmsSignature instanceof asn1_36) === false)
+	if((cmsSignature instanceof Sequence) === false)
 		return new ArrayBuffer(0);
 	
 	if(cmsSignature.valueBlock.value.length !== 2)
 		return new ArrayBuffer(0);
 	
-	if((cmsSignature.valueBlock.value[0] instanceof asn1_31) === false)
+	if((cmsSignature.valueBlock.value[0] instanceof Integer) === false)
 		return new ArrayBuffer(0);
 	
-	if((cmsSignature.valueBlock.value[1] instanceof asn1_31) === false)
+	if((cmsSignature.valueBlock.value[1] instanceof Integer) === false)
 		return new ArrayBuffer(0);
 	//endregion
 	
@@ -13030,11 +6459,11 @@ class AttributeTypeAndValue
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.type || "") }),
-				new asn1_7({ name: (names.value || "") })
+				new ObjectIdentifier({ name: (names.type || "") }),
+				new Any({ name: (names.value || "") })
 			]
 		}));
 	}
@@ -13058,7 +6487,7 @@ class AttributeTypeAndValue
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			AttributeTypeAndValue.schema({
 				names: {
@@ -13086,9 +6515,9 @@ class AttributeTypeAndValue
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_29({ value: this.type }),
+				new ObjectIdentifier({ value: this.type }),
 				this.value
 			]
 		}));
@@ -13121,18 +6550,18 @@ class AttributeTypeAndValue
 	isEqual(compareTo)
 	{
 		const stringBlockNames = [
-			asn1_28.blockName(),
-			asn1_26.blockName(),
-			asn1_25.blockName(),
-			asn1_24.blockName(),
-			asn1_23.blockName(),
-			asn1_22.blockName(),
-			asn1_21.blockName(),
-			asn1_20.blockName(),
-			asn1_19.blockName(),
-			asn1_18.blockName(),
-			asn1_17.blockName(),
-			asn1_16.blockName()
+			Utf8String.blockName(),
+			BmpString.blockName(),
+			UniversalString.blockName(),
+			NumericString.blockName(),
+			PrintableString.blockName(),
+			TeletexString.blockName(),
+			VideotexString.blockName(),
+			IA5String.blockName(),
+			GraphicString.blockName(),
+			VisibleString.blockName(),
+			GeneralString.blockName(),
+			CharacterString.blockName()
 		];
 
 		if(compareTo.constructor.blockName() === AttributeTypeAndValue.blockName())
@@ -13278,14 +6707,14 @@ class RelativeDistinguishedNames
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.repeatedSequence || ""),
-					value: new asn1_35({
+					value: new Set({
 						value: [
-							new asn1_6({
+							new Repeated({
 								name: (names.repeatedSet || ""),
 								value: AttributeTypeAndValue.schema(names.typeAndValue || {})
 							})
@@ -13310,7 +6739,7 @@ class RelativeDistinguishedNames
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			RelativeDistinguishedNames.schema({
 				names: {
@@ -13342,14 +6771,14 @@ class RelativeDistinguishedNames
 		//region Decode stored TBS value
 		if(this.valueBeforeDecode.byteLength === 0) // No stored encoded array, create "from scratch"
 		{
-			return (new asn1_36({
-				value: [new asn1_35({
+			return (new Sequence({
+				value: [new Set({
 					value: Array.from(this.typesAndValues, element => element.toSchema())
 				})]
 			}));
 		}
 
-		const asn1 = asn1_1(this.valueBeforeDecode);
+		const asn1 = fromBER(this.valueBeforeDecode);
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
@@ -13435,10 +6864,10 @@ function builtInStandardAttributes(parameters = {}, optional = false)
 	 */
 	const names = getParametersValue(parameters, "names", {});
 
-	return (new asn1_36({
+	return (new Sequence({
 		optional,
 		value: [
-			new asn1_39({
+			new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 2, // APPLICATION-SPECIFIC
@@ -13446,15 +6875,15 @@ function builtInStandardAttributes(parameters = {}, optional = false)
 				},
 				name: (names.country_name || ""),
 				value: [
-					new asn1_8({
+					new Choice({
 						value: [
-							new asn1_24(),
-							new asn1_23()
+							new NumericString(),
+							new PrintableString()
 						]
 					})
 				]
 			}),
-			new asn1_39({
+			new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 2, // APPLICATION-SPECIFIC
@@ -13462,15 +6891,15 @@ function builtInStandardAttributes(parameters = {}, optional = false)
 				},
 				name: (names.administration_domain_name || ""),
 				value: [
-					new asn1_8({
+					new Choice({
 						value: [
-							new asn1_24(),
-							new asn1_23()
+							new NumericString(),
+							new PrintableString()
 						]
 					})
 				]
 			}),
-			new asn1_40({
+			new Primitive({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -13479,7 +6908,7 @@ function builtInStandardAttributes(parameters = {}, optional = false)
 				name: (names.network_address || ""),
 				isHexOnly: true
 			}),
-			new asn1_40({
+			new Primitive({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -13488,7 +6917,7 @@ function builtInStandardAttributes(parameters = {}, optional = false)
 				name: (names.terminal_identifier || ""),
 				isHexOnly: true
 			}),
-			new asn1_39({
+			new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -13496,15 +6925,15 @@ function builtInStandardAttributes(parameters = {}, optional = false)
 				},
 				name: (names.private_domain_name || ""),
 				value: [
-					new asn1_8({
+					new Choice({
 						value: [
-							new asn1_24(),
-							new asn1_23()
+							new NumericString(),
+							new PrintableString()
 						]
 					})
 				]
 			}),
-			new asn1_40({
+			new Primitive({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -13513,7 +6942,7 @@ function builtInStandardAttributes(parameters = {}, optional = false)
 				name: (names.organization_name || ""),
 				isHexOnly: true
 			}),
-			new asn1_40({
+			new Primitive({
 				optional: true,
 				name: (names.numeric_user_identifier || ""),
 				idBlock: {
@@ -13522,7 +6951,7 @@ function builtInStandardAttributes(parameters = {}, optional = false)
 				},
 				isHexOnly: true
 			}),
-			new asn1_39({
+			new Constructed({
 				optional: true,
 				name: (names.personal_name || ""),
 				idBlock: {
@@ -13530,14 +6959,14 @@ function builtInStandardAttributes(parameters = {}, optional = false)
 					tagNumber: 5 // [5]
 				},
 				value: [
-					new asn1_40({
+					new Primitive({
 						idBlock: {
 							tagClass: 3, // CONTEXT-SPECIFIC
 							tagNumber: 0 // [0]
 						},
 						isHexOnly: true
 					}),
-					new asn1_40({
+					new Primitive({
 						optional: true,
 						idBlock: {
 							tagClass: 3, // CONTEXT-SPECIFIC
@@ -13545,7 +6974,7 @@ function builtInStandardAttributes(parameters = {}, optional = false)
 						},
 						isHexOnly: true
 					}),
-					new asn1_40({
+					new Primitive({
 						optional: true,
 						idBlock: {
 							tagClass: 3, // CONTEXT-SPECIFIC
@@ -13553,7 +6982,7 @@ function builtInStandardAttributes(parameters = {}, optional = false)
 						},
 						isHexOnly: true
 					}),
-					new asn1_40({
+					new Primitive({
 						optional: true,
 						idBlock: {
 							tagClass: 3, // CONTEXT-SPECIFIC
@@ -13563,7 +6992,7 @@ function builtInStandardAttributes(parameters = {}, optional = false)
 					})
 				]
 			}),
-			new asn1_39({
+			new Constructed({
 				optional: true,
 				name: (names.organizational_unit_names || ""),
 				idBlock: {
@@ -13571,8 +7000,8 @@ function builtInStandardAttributes(parameters = {}, optional = false)
 					tagNumber: 6 // [6]
 				},
 				value: [
-					new asn1_6({
-						value: new asn1_23()
+					new Repeated({
+						value: new PrintableString()
 					})
 				]
 			})
@@ -13587,11 +7016,11 @@ function builtInStandardAttributes(parameters = {}, optional = false)
  */
 function builtInDomainDefinedAttributes(optional = false)
 {
-	return (new asn1_36({
+	return (new Sequence({
 		optional,
 		value: [
-			new asn1_23(),
-			new asn1_23()
+			new PrintableString(),
+			new PrintableString()
 		]
 	}));
 }
@@ -13603,10 +7032,10 @@ function builtInDomainDefinedAttributes(optional = false)
  */
 function extensionAttributes(optional = false)
 {
-	return (new asn1_35({
+	return (new Set({
 		optional,
 		value: [
-			new asn1_40({
+			new Primitive({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -13614,13 +7043,13 @@ function extensionAttributes(optional = false)
 				},
 				isHexOnly: true
 			}),
-			new asn1_39({
+			new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 1 // [1]
 				},
-				value: [new asn1_7()]
+				value: [new Any()]
 			})
 		]
 	}));
@@ -13727,40 +7156,40 @@ class GeneralName
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_8({
+		return (new Choice({
 			value: [
-				new asn1_39({
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
 					name: (names.blockName || ""),
 					value: [
-						new asn1_29(),
-						new asn1_39({
+						new ObjectIdentifier(),
+						new Constructed({
 							idBlock: {
 								tagClass: 3, // CONTEXT-SPECIFIC
 								tagNumber: 0 // [0]
 							},
-							value: [new asn1_7()]
+							value: [new Any()]
 						})
 					]
 				}),
-				new asn1_40({
+				new Primitive({
 					name: (names.blockName || ""),
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
 					}
 				}),
-				new asn1_40({
+				new Primitive({
 					name: (names.blockName || ""),
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 2 // [2]
 					}
 				}),
-				new asn1_39({
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 3 // [3]
@@ -13772,7 +7201,7 @@ class GeneralName
 						extensionAttributes(true)
 					]
 				}),
-				new asn1_39({
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 4 // [4]
@@ -13780,65 +7209,65 @@ class GeneralName
 					name: (names.blockName || ""),
 					value: [RelativeDistinguishedNames.schema(names.directoryName || {})]
 				}),
-				new asn1_39({
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 5 // [5]
 					},
 					name: (names.blockName || ""),
 					value: [
-						new asn1_39({
+						new Constructed({
 							optional: true,
 							idBlock: {
 								tagClass: 3, // CONTEXT-SPECIFIC
 								tagNumber: 0 // [0]
 							},
 							value: [
-								new asn1_8({
+								new Choice({
 									value: [
-										new asn1_22(),
-										new asn1_23(),
-										new asn1_25(),
-										new asn1_28(),
-										new asn1_26()
+										new TeletexString(),
+										new PrintableString(),
+										new UniversalString(),
+										new Utf8String(),
+										new BmpString()
 									]
 								})
 							]
 						}),
-						new asn1_39({
+						new Constructed({
 							idBlock: {
 								tagClass: 3, // CONTEXT-SPECIFIC
 								tagNumber: 1 // [1]
 							},
 							value: [
-								new asn1_8({
+								new Choice({
 									value: [
-										new asn1_22(),
-										new asn1_23(),
-										new asn1_25(),
-										new asn1_28(),
-										new asn1_26()
+										new TeletexString(),
+										new PrintableString(),
+										new UniversalString(),
+										new Utf8String(),
+										new BmpString()
 									]
 								})
 							]
 						})
 					]
 				}),
-				new asn1_40({
+				new Primitive({
 					name: (names.blockName || ""),
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 6 // [6]
 					}
 				}),
-				new asn1_40({
+				new Primitive({
 					name: (names.blockName || ""),
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 7 // [7]
 					}
 				}),
-				new asn1_40({
+				new Primitive({
 					name: (names.blockName || ""),
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -13871,7 +7300,7 @@ class GeneralName
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			GeneralName.schema({
 				names: {
@@ -13916,7 +7345,7 @@ class GeneralName
 
 					const valueBER = value.toBER(false);
 
-					this.value = asn1_1(valueBER).result.valueBlock.value;
+					this.value = fromBER(valueBER).result.valueBlock.value;
 				}
 				break;
 			case 3: // x400Address
@@ -13929,7 +7358,7 @@ class GeneralName
 				this.value = asn1.result.ediPartyName;
 				break;
 			case 7: // iPAddress
-				this.value = new asn1_33({ valueHex: asn1.result.blockName.valueBlock.valueHex });
+				this.value = new OctetString({ valueHex: asn1.result.blockName.valueBlock.valueHex });
 				break;
 			case 8: // registeredID
 				{
@@ -13940,7 +7369,7 @@ class GeneralName
 
 					const valueBER = value.toBER(false);
 
-					this.value = asn1_1(valueBER).result.valueBlock.toString(); // Getting a string representation of the ObjectIdentifier
+					this.value = fromBER(valueBER).result.valueBlock.toString(); // Getting a string representation of the ObjectIdentifier
 				}
 				break;
 		}
@@ -13959,7 +7388,7 @@ class GeneralName
 			case 0:
 			case 3:
 			case 5:
-				return new asn1_39({
+				return new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: this.type
@@ -13972,7 +7401,7 @@ class GeneralName
 			case 2:
 			case 6:
 				{
-					const value = new asn1_20({ value: this.value });
+					const value = new IA5String({ value: this.value });
 
 					value.idBlock.tagClass = 3;
 					value.idBlock.tagNumber = this.type;
@@ -13980,7 +7409,7 @@ class GeneralName
 					return value;
 				}
 			case 4:
-				return new asn1_39({
+				return new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 4
@@ -13998,7 +7427,7 @@ class GeneralName
 				}
 			case 8:
 				{
-					const value = new asn1_29({ value: this.value });
+					const value = new ObjectIdentifier({ value: this.value });
 
 					value.idBlock.tagClass = 3;
 					value.idBlock.tagNumber = this.type;
@@ -14112,10 +7541,10 @@ class AccessDescription
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.accessMethod || "") }),
+				new ObjectIdentifier({ name: (names.accessMethod || "") }),
 				GeneralName.schema(names.accessLocation || {})
 			]
 		}));
@@ -14135,7 +7564,7 @@ class AccessDescription
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			AccessDescription.schema({
 				names: {
@@ -14166,9 +7595,9 @@ class AccessDescription
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_29({ value: this.accessMethod }),
+				new ObjectIdentifier({ value: this.accessMethod }),
 				this.accessLocation.toSchema()
 			]
 		}));
@@ -14293,15 +7722,15 @@ class Accuracy
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			optional: true,
 			value: [
-				new asn1_31({
+				new Integer({
 					optional: true,
 					name: (names.seconds || "")
 				}),
-				new asn1_40({
+				new Primitive({
 					name: (names.millis || ""),
 					optional: true,
 					idBlock: {
@@ -14309,7 +7738,7 @@ class Accuracy
 						tagNumber: 0 // [0]
 					}
 				}),
-				new asn1_40({
+				new Primitive({
 					name: (names.micros || ""),
 					optional: true,
 					idBlock: {
@@ -14336,7 +7765,7 @@ class Accuracy
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			Accuracy.schema({
 				names: {
@@ -14357,13 +7786,13 @@ class Accuracy
 
 		if("millis" in asn1.result)
 		{
-			const intMillis = new asn1_31({ valueHex: asn1.result.millis.valueBlock.valueHex });
+			const intMillis = new Integer({ valueHex: asn1.result.millis.valueBlock.valueHex });
 			this.millis = intMillis.valueBlock.valueDec;
 		}
 
 		if("micros" in asn1.result)
 		{
-			const intMicros = new asn1_31({ valueHex: asn1.result.micros.valueBlock.valueHex });
+			const intMicros = new Integer({ valueHex: asn1.result.micros.valueBlock.valueHex });
 			this.micros = intMicros.valueBlock.valueDec;
 		}
 		//endregion
@@ -14379,13 +7808,13 @@ class Accuracy
 		const outputArray = [];
 
 		if("seconds" in this)
-			outputArray.push(new asn1_31({ value: this.seconds }));
+			outputArray.push(new Integer({ value: this.seconds }));
 
 		if("millis" in this)
 		{
-			const intMillis = new asn1_31({ value: this.millis });
+			const intMillis = new Integer({ value: this.millis });
 
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -14396,9 +7825,9 @@ class Accuracy
 
 		if("micros" in this)
 		{
-			const intMicros = new asn1_31({ value: this.micros });
+			const intMicros = new Integer({ value: this.micros });
 
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 1 // [1]
@@ -14409,7 +7838,7 @@ class Accuracy
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -14501,10 +7930,10 @@ class AltName
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.altNames || ""),
 					value: GeneralName.schema()
 				})
@@ -14525,7 +7954,7 @@ class AltName
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			AltName.schema({
 				names: {
@@ -14551,7 +7980,7 @@ class AltName
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: Array.from(this.altNames, element => element.toSchema())
 		}));
 		//endregion
@@ -14615,7 +8044,7 @@ class ContentInfo
 			case "contentType":
 				return "";
 			case "content":
-				return new asn1_7();
+				return new Any();
 			default:
 				throw new Error(`Invalid member name for ContentInfo class: ${memberName}`);
 		}
@@ -14633,7 +8062,7 @@ class ContentInfo
 			case "contentType":
 				return (memberValue === "");
 			case "content":
-				return (memberValue instanceof asn1_7);
+				return (memberValue instanceof Any);
 			default:
 				throw new Error(`Invalid member name for ContentInfo class: ${memberName}`);
 		}
@@ -14665,17 +8094,17 @@ class ContentInfo
 		if(("optional" in names) === false)
 			names.optional = false;
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || "ContentInfo"),
 			optional: names.optional,
 			value: [
-				new asn1_29({ name: (names.contentType || "contentType") }),
-				new asn1_39({
+				new ObjectIdentifier({ name: (names.contentType || "contentType") }),
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
-					value: [new asn1_7({ name: (names.content || "content") })] // EXPLICIT ANY value
+					value: [new Any({ name: (names.content || "content") })] // EXPLICIT ANY value
 				})
 			]
 		}));
@@ -14695,7 +8124,7 @@ class ContentInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			ContentInfo.schema()
 		);
@@ -14717,10 +8146,10 @@ class ContentInfo
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_29({ value: this.contentType }),
-				new asn1_39({
+				new ObjectIdentifier({ value: this.contentType }),
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
@@ -14742,7 +8171,7 @@ class ContentInfo
 			contentType: this.contentType
 		};
 
-		if(!(this.content instanceof asn1_7))
+		if(!(this.content instanceof Any))
 			object.content = this.content.toJSON();
 
 		return object;
@@ -14857,19 +8286,19 @@ class EncryptedData
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.version || "") }),
+				new Integer({ name: (names.version || "") }),
 				EncryptedContentInfo.schema(names.encryptedContentInfo || {}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
 					},
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.unprotectedAttrs || ""),
 							value: Attribute.schema()
 						})
@@ -14894,7 +8323,7 @@ class EncryptedData
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			EncryptedData.schema({
 				names: {
@@ -14931,12 +8360,12 @@ class EncryptedData
 		//region Create array for output sequence
 		const outputArray = [];
 		
-		outputArray.push(new asn1_31({ value: this.version }));
+		outputArray.push(new Integer({ value: this.version }));
 		outputArray.push(this.encryptedContentInfo.toSchema());
 		
 		if("unprotectedAttrs" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -14948,7 +8377,7 @@ class EncryptedData
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -15085,7 +8514,7 @@ class PKCS8ShroudedKeyBag
 			case "encryptionAlgorithm":
 				return (new AlgorithmIdentifier());
 			case "encryptedData":
-				return (new asn1_33());
+				return (new OctetString());
 			case "parsedValue":
 				return {};
 			default:
@@ -15142,7 +8571,7 @@ class PKCS8ShroudedKeyBag
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				AlgorithmIdentifier.schema(names.encryptionAlgorithm || {
@@ -15150,10 +8579,10 @@ class PKCS8ShroudedKeyBag
 						blockName: "encryptionAlgorithm"
 					}
 				}),
-				new asn1_8({
+				new Choice({
 					value: [
-						new asn1_33({ name: (names.encryptedData || "encryptedData") }),
-						new asn1_33({
+						new OctetString({ name: (names.encryptedData || "encryptedData") }),
+						new OctetString({
 							idBlock: {
 								isConstructed: true
 							},
@@ -15179,7 +8608,7 @@ class PKCS8ShroudedKeyBag
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PKCS8ShroudedKeyBag.schema({
 				names: {
@@ -15210,7 +8639,7 @@ class PKCS8ShroudedKeyBag
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				this.encryptionAlgorithm.toSchema(),
 				this.encryptedData
@@ -15258,7 +8687,7 @@ class PKCS8ShroudedKeyBag
 			 */
 			result =>
 			{
-				const asn1 = asn1_1(result);
+				const asn1 = fromBER(result);
 				if(asn1.offset === (-1))
 					return Promise.reject("Error during parsing ASN.1 data");
 				
@@ -15390,11 +8819,11 @@ class Time
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_8({
+		return (new Choice({
 			optional,
 			value: [
-				new asn1_15({ name: (names.utcTimeName || "") }),
-				new asn1_14({ name: (names.generalTimeName || "") })
+				new UTCTime({ name: (names.utcTimeName || "") }),
+				new GeneralizedTime({ name: (names.generalTimeName || "") })
 			]
 		}));
 	}
@@ -15413,7 +8842,7 @@ class Time
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema, schema, Time.schema({
+		const asn1 = compareSchema(schema, schema, Time.schema({
 			names: {
 				utcTimeName: "utcTimeName",
 				generalTimeName: "generalTimeName"
@@ -15448,9 +8877,9 @@ class Time
 		let result = {};
 
 		if(this.type === 0)
-			result = new asn1_15({ valueDate: this.value });
+			result = new UTCTime({ valueDate: this.value });
 		if(this.type === 1)
-			result = new asn1_14({ valueDate: this.value });
+			result = new GeneralizedTime({ valueDate: this.value });
 
 		return result;
 		//endregion
@@ -15535,10 +8964,10 @@ class SubjectDirectoryAttributes
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.attributes || ""),
 					value: Attribute.schema()
 				})
@@ -15559,7 +8988,7 @@ class SubjectDirectoryAttributes
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			SubjectDirectoryAttributes.schema({
 				names: {
@@ -15584,7 +9013,7 @@ class SubjectDirectoryAttributes
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: Array.from(this.attributes, element => element.toSchema())
 		}));
 		//endregion
@@ -15683,10 +9112,10 @@ class PrivateKeyUsagePeriod
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_40({
+				new Primitive({
 					name: (names.notBefore || ""),
 					optional: true,
 					idBlock: {
@@ -15694,7 +9123,7 @@ class PrivateKeyUsagePeriod
 						tagNumber: 0 // [0]
 					}
 				}),
-				new asn1_40({
+				new Primitive({
 					name: (names.notAfter || ""),
 					optional: true,
 					idBlock: {
@@ -15720,7 +9149,7 @@ class PrivateKeyUsagePeriod
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PrivateKeyUsagePeriod.schema({
 				names: {
@@ -15737,14 +9166,14 @@ class PrivateKeyUsagePeriod
 		//region Get internal properties from parsed schema
 		if("notBefore" in asn1.result)
 		{
-			const localNotBefore = new asn1_14();
+			const localNotBefore = new GeneralizedTime();
 			localNotBefore.fromBuffer(asn1.result.notBefore.valueBlock.valueHex);
 			this.notBefore = localNotBefore.toDate();
 		}
 
 		if("notAfter" in asn1.result)
 		{
-			const localNotAfter = new asn1_14({ valueHex: asn1.result.notAfter.valueBlock.valueHex });
+			const localNotAfter = new GeneralizedTime({ valueHex: asn1.result.notAfter.valueBlock.valueHex });
 			localNotAfter.fromBuffer(asn1.result.notAfter.valueBlock.valueHex);
 			this.notAfter = localNotAfter.toDate();
 		}
@@ -15762,29 +9191,29 @@ class PrivateKeyUsagePeriod
 		
 		if("notBefore" in this)
 		{
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
 				},
-				valueHex: (new asn1_14({ valueDate: this.notBefore })).valueBlock.valueHex
+				valueHex: (new GeneralizedTime({ valueDate: this.notBefore })).valueBlock.valueHex
 			}));
 		}
 		
 		if("notAfter" in this)
 		{
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 1 // [1]
 				},
-				valueHex: (new asn1_14({ valueDate: this.notAfter })).valueBlock.valueHex
+				valueHex: (new GeneralizedTime({ valueDate: this.notAfter })).valueBlock.valueHex
 			}));
 		}
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -15885,14 +9314,14 @@ class BasicConstraints
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_37({
+				new Boolean({
 					optional: true,
 					name: (names.cA || "")
 				}),
-				new asn1_31({
+				new Integer({
 					optional: true,
 					name: (names.pathLenConstraint || "")
 				})
@@ -15914,7 +9343,7 @@ class BasicConstraints
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			BasicConstraints.schema({
 				names: {
@@ -15952,19 +9381,19 @@ class BasicConstraints
 		const outputArray = [];
 		
 		if(this.cA !== BasicConstraints.defaultValues("cA"))
-			outputArray.push(new asn1_37({ value: this.cA }));
+			outputArray.push(new Boolean({ value: this.cA }));
 		
 		if("pathLenConstraint" in this)
 		{
-			if(this.pathLenConstraint instanceof asn1_31)
+			if(this.pathLenConstraint instanceof Integer)
 				outputArray.push(this.pathLenConstraint);
 			else
-				outputArray.push(new asn1_31({ value: this.pathLenConstraint }));
+				outputArray.push(new Integer({ value: this.pathLenConstraint }));
 		}
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -15983,7 +9412,7 @@ class BasicConstraints
 
 		if("pathLenConstraint" in this)
 		{
-			if(this.pathLenConstraint instanceof asn1_31)
+			if(this.pathLenConstraint instanceof Integer)
 				object.pathLenConstraint = this.pathLenConstraint.toJSON();
 			else
 				object.pathLenConstraint = this.pathLenConstraint;
@@ -16123,32 +9552,32 @@ class IssuingDistributionPoint
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
 					value: [
-						new asn1_8({
+						new Choice({
 							value: [
-								new asn1_39({
+								new Constructed({
 									name: (names.distributionPoint || ""),
 									idBlock: {
 										tagClass: 3, // CONTEXT-SPECIFIC
 										tagNumber: 0 // [0]
 									},
 									value: [
-										new asn1_6({
+										new Repeated({
 											name: (names.distributionPointNames || ""),
 											value: GeneralName.schema()
 										})
 									]
 								}),
-								new asn1_39({
+								new Constructed({
 									name: (names.distributionPoint || ""),
 									idBlock: {
 										tagClass: 3, // CONTEXT-SPECIFIC
@@ -16160,7 +9589,7 @@ class IssuingDistributionPoint
 						})
 					]
 				}),
-				new asn1_40({
+				new Primitive({
 					name: (names.onlyContainsUserCerts || ""),
 					optional: true,
 					idBlock: {
@@ -16168,7 +9597,7 @@ class IssuingDistributionPoint
 						tagNumber: 1 // [1]
 					}
 				}), // IMPLICIT boolean value
-				new asn1_40({
+				new Primitive({
 					name: (names.onlyContainsCACerts || ""),
 					optional: true,
 					idBlock: {
@@ -16176,7 +9605,7 @@ class IssuingDistributionPoint
 						tagNumber: 2 // [2]
 					}
 				}), // IMPLICIT boolean value
-				new asn1_40({
+				new Primitive({
 					name: (names.onlySomeReasons || ""),
 					optional: true,
 					idBlock: {
@@ -16184,7 +9613,7 @@ class IssuingDistributionPoint
 						tagNumber: 3 // [3]
 					}
 				}), // IMPLICIT bitstring value
-				new asn1_40({
+				new Primitive({
 					name: (names.indirectCRL || ""),
 					optional: true,
 					idBlock: {
@@ -16192,7 +9621,7 @@ class IssuingDistributionPoint
 						tagNumber: 4 // [4]
 					}
 				}), // IMPLICIT boolean value
-				new asn1_40({
+				new Primitive({
 					name: (names.onlyContainsAttributeCerts || ""),
 					optional: true,
 					idBlock: {
@@ -16223,7 +9652,7 @@ class IssuingDistributionPoint
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			IssuingDistributionPoint.schema({
 				names: {
@@ -16253,7 +9682,7 @@ class IssuingDistributionPoint
 				case (asn1.result.distributionPoint.idBlock.tagNumber === 1): // RDN variant
 					{
 						this.distributionPoint = new RelativeDistinguishedNames({
-							schema: new asn1_36({
+							schema: new Sequence({
 								value: asn1.result.distributionPoint.valueBlock.value
 							})
 						});
@@ -16311,7 +9740,7 @@ class IssuingDistributionPoint
 			
 			if(this.distributionPoint instanceof Array)
 			{
-				value = new asn1_39({
+				value = new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
@@ -16327,7 +9756,7 @@ class IssuingDistributionPoint
 				value.idBlock.tagNumber = 1; // [1]
 			}
 			
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -16338,7 +9767,7 @@ class IssuingDistributionPoint
 		
 		if(this.onlyContainsUserCerts !== IssuingDistributionPoint.defaultValues("onlyContainsUserCerts"))
 		{
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 1 // [1]
@@ -16349,7 +9778,7 @@ class IssuingDistributionPoint
 		
 		if(this.onlyContainsCACerts !== IssuingDistributionPoint.defaultValues("onlyContainsCACerts"))
 		{
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 2 // [2]
@@ -16365,7 +9794,7 @@ class IssuingDistributionPoint
 			
 			view[0] = this.onlySomeReasons;
 			
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 3 // [3]
@@ -16376,7 +9805,7 @@ class IssuingDistributionPoint
 		
 		if(this.indirectCRL !== IssuingDistributionPoint.defaultValues("indirectCRL"))
 		{
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 4 // [4]
@@ -16387,7 +9816,7 @@ class IssuingDistributionPoint
 		
 		if(this.onlyContainsAttributeCerts !== IssuingDistributionPoint.defaultValues("onlyContainsAttributeCerts"))
 		{
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 5 // [5]
@@ -16398,7 +9827,7 @@ class IssuingDistributionPoint
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -16505,11 +9934,11 @@ class GeneralNames
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			optional,
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.generalNames || ""),
 					value: GeneralName.schema()
 				})
@@ -16531,7 +9960,7 @@ class GeneralNames
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			GeneralNames.schema({
 				names: {
@@ -16557,7 +9986,7 @@ class GeneralNames
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: Array.from(this.names, element => element.toSchema())
 		}));
 		//endregion
@@ -16664,25 +10093,25 @@ class GeneralSubtree
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				GeneralName.schema(names.base || {}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
-					value: [new asn1_31({ name: (names.minimum || "") })]
+					value: [new Integer({ name: (names.minimum || "") })]
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
 					},
-					value: [new asn1_31({ name: (names.maximum || "") })]
+					value: [new Integer({ name: (names.maximum || "") })]
 				})
 			]
 		}));
@@ -16703,7 +10132,7 @@ class GeneralSubtree
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			GeneralSubtree.schema({
 				names: {
@@ -16758,12 +10187,12 @@ class GeneralSubtree
 		{
 			let valueMinimum = 0;
 			
-			if(this.minimum instanceof asn1_31)
+			if(this.minimum instanceof Integer)
 				valueMinimum = this.minimum;
 			else
-				valueMinimum = new asn1_31({ value: this.minimum });
+				valueMinimum = new Integer({ value: this.minimum });
 			
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -16777,12 +10206,12 @@ class GeneralSubtree
 		{
 			let valueMaximum = 0;
 			
-			if(this.maximum instanceof asn1_31)
+			if(this.maximum instanceof Integer)
 				valueMaximum = this.maximum;
 			else
-				valueMaximum = new asn1_31({ value: this.maximum });
+				valueMaximum = new Integer({ value: this.maximum });
 			
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -16794,7 +10223,7 @@ class GeneralSubtree
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -16908,30 +10337,30 @@ class NameConstraints
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.permittedSubtrees || ""),
 							value: GeneralSubtree.schema()
 						})
 					]
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
 					},
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.excludedSubtrees || ""),
 							value: GeneralSubtree.schema()
 						})
@@ -16955,7 +10384,7 @@ class NameConstraints
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			NameConstraints.schema({
 				names: {
@@ -16989,7 +10418,7 @@ class NameConstraints
 		
 		if("permittedSubtrees" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -17000,7 +10429,7 @@ class NameConstraints
 		
 		if("excludedSubtrees" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 1 // [1]
@@ -17011,7 +10440,7 @@ class NameConstraints
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -17094,7 +10523,7 @@ class DistributionPoint
 			case "distributionPoint":
 				return [];
 			case "reasons":
-				return new asn1_32();
+				return new BitString();
 			case "cRLIssuer":
 				return [];
 			default:
@@ -17144,19 +10573,19 @@ class DistributionPoint
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
 					value: [
-						new asn1_8({
+						new Choice({
 							value: [
-								new asn1_39({
+								new Constructed({
 									name: (names.distributionPoint || ""),
 									optional: true,
 									idBlock: {
@@ -17164,13 +10593,13 @@ class DistributionPoint
 										tagNumber: 0 // [0]
 									},
 									value: [
-										new asn1_6({
+										new Repeated({
 											name: (names.distributionPointNames || ""),
 											value: GeneralName.schema()
 										})
 									]
 								}),
-								new asn1_39({
+								new Constructed({
 									name: (names.distributionPoint || ""),
 									optional: true,
 									idBlock: {
@@ -17183,7 +10612,7 @@ class DistributionPoint
 						})
 					]
 				}),
-				new asn1_40({
+				new Primitive({
 					name: (names.reasons || ""),
 					optional: true,
 					idBlock: {
@@ -17191,7 +10620,7 @@ class DistributionPoint
 						tagNumber: 1 // [1]
 					}
 				}), // IMPLICIT bitstring value
-				new asn1_39({
+				new Constructed({
 					name: (names.cRLIssuer || ""),
 					optional: true,
 					idBlock: {
@@ -17199,7 +10628,7 @@ class DistributionPoint
 						tagNumber: 2 // [2]
 					},
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.cRLIssuerNames || ""),
 							value: GeneralName.schema()
 						})
@@ -17226,7 +10655,7 @@ class DistributionPoint
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			DistributionPoint.schema({
 				names: {
@@ -17252,7 +10681,7 @@ class DistributionPoint
 			if(asn1.result.distributionPoint.idBlock.tagNumber === 1) // RDN variant
 			{
 				this.distributionPoint = new RelativeDistinguishedNames({
-					schema: new asn1_36({
+					schema: new Sequence({
 						value: asn1.result.distributionPoint.valueBlock.value
 					})
 				});
@@ -17260,7 +10689,7 @@ class DistributionPoint
 		}
 
 		if("reasons" in asn1.result)
-			this.reasons = new asn1_32({ valueHex: asn1.result.reasons.valueBlock.valueHex });
+			this.reasons = new BitString({ valueHex: asn1.result.reasons.valueBlock.valueHex });
 
 		if("cRLIssuer" in asn1.result)
 			this.cRLIssuer = Array.from(asn1.result.cRLIssuerNames, element => new GeneralName({ schema: element }));
@@ -17282,7 +10711,7 @@ class DistributionPoint
 			
 			if(this.distributionPoint instanceof Array)
 			{
-				internalValue = new asn1_39({
+				internalValue = new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
@@ -17292,7 +10721,7 @@ class DistributionPoint
 			}
 			else
 			{
-				internalValue = new asn1_39({
+				internalValue = new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
@@ -17301,7 +10730,7 @@ class DistributionPoint
 				});
 			}
 			
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -17312,7 +10741,7 @@ class DistributionPoint
 		
 		if("reasons" in this)
 		{
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 1 // [1]
@@ -17323,7 +10752,7 @@ class DistributionPoint
 		
 		if("cRLIssuer" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 2 // [2]
@@ -17334,7 +10763,7 @@ class DistributionPoint
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -17431,10 +10860,10 @@ class CRLDistributionPoints
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.distributionPoints || ""),
 					value: DistributionPoint.schema()
 				})
@@ -17455,7 +10884,7 @@ class CRLDistributionPoints
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			CRLDistributionPoints.schema({
 				names: {
@@ -17480,7 +10909,7 @@ class CRLDistributionPoints
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: Array.from(this.distributionPoints, element => element.toSchema())
 		}));
 		//endregion
@@ -17544,7 +10973,7 @@ class PolicyQualifierInfo
 			case "policyQualifierId":
 				return "";
 			case "qualifier":
-				return new asn1_7();
+				return new Any();
 			default:
 				throw new Error(`Invalid member name for PolicyQualifierInfo class: ${memberName}`);
 		}
@@ -17579,11 +11008,11 @@ class PolicyQualifierInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.policyQualifierId || "") }),
-				new asn1_7({ name: (names.qualifier || "") })
+				new ObjectIdentifier({ name: (names.policyQualifierId || "") }),
+				new Any({ name: (names.qualifier || "") })
 			]
 		}));
 	}
@@ -17602,7 +11031,7 @@ class PolicyQualifierInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PolicyQualifierInfo.schema({
 				names: {
@@ -17629,9 +11058,9 @@ class PolicyQualifierInfo
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_29({ value: this.policyQualifierId }),
+				new ObjectIdentifier({ value: this.policyQualifierId }),
 				this.qualifier
 			]
 		}));
@@ -17731,14 +11160,14 @@ class PolicyInformation
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.policyIdentifier || "") }),
-				new asn1_36({
+				new ObjectIdentifier({ name: (names.policyIdentifier || "") }),
+				new Sequence({
 					optional: true,
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.policyQualifiers || ""),
 							value: PolicyQualifierInfo.schema()
 						})
@@ -17762,7 +11191,7 @@ class PolicyInformation
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PolicyInformation.schema({
 				names: {
@@ -17793,18 +11222,18 @@ class PolicyInformation
 		//region Create array for output sequence
 		const outputArray = [];
 		
-		outputArray.push(new asn1_29({ value: this.policyIdentifier }));
+		outputArray.push(new ObjectIdentifier({ value: this.policyIdentifier }));
 		
 		if("policyQualifiers" in this)
 		{
-			outputArray.push(new asn1_36({
+			outputArray.push(new Sequence({
 				value: Array.from(this.policyQualifiers, element => element.toSchema())
 			}));
 		}
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -17892,10 +11321,10 @@ class CertificatePolicies
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.certificatePolicies || ""),
 					value: PolicyInformation.schema()
 				})
@@ -17916,7 +11345,7 @@ class CertificatePolicies
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			CertificatePolicies.schema({
 				names: {
@@ -17941,7 +11370,7 @@ class CertificatePolicies
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: Array.from(this.certificatePolicies, element => element.toSchema())
 		}));
 		//endregion
@@ -18034,11 +11463,11 @@ class PolicyMapping
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.issuerDomainPolicy || "") }),
-				new asn1_29({ name: (names.subjectDomainPolicy || "") })
+				new ObjectIdentifier({ name: (names.issuerDomainPolicy || "") }),
+				new ObjectIdentifier({ name: (names.subjectDomainPolicy || "") })
 			]
 		}));
 	}
@@ -18057,7 +11486,7 @@ class PolicyMapping
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PolicyMapping.schema({
 				names: {
@@ -18084,10 +11513,10 @@ class PolicyMapping
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_29({ value: this.issuerDomainPolicy }),
-				new asn1_29({ value: this.subjectDomainPolicy })
+				new ObjectIdentifier({ value: this.issuerDomainPolicy }),
+				new ObjectIdentifier({ value: this.subjectDomainPolicy })
 			]
 		}));
 		//endregion
@@ -18172,10 +11601,10 @@ class PolicyMappings
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.mappings || ""),
 					value: PolicyMapping.schema()
 				})
@@ -18196,7 +11625,7 @@ class PolicyMappings
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PolicyMappings.schema({
 				names: {
@@ -18221,7 +11650,7 @@ class PolicyMappings
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: Array.from(this.mappings, element => element.toSchema())
 		}));
 		//endregion
@@ -18293,11 +11722,11 @@ class AuthorityKeyIdentifier
 		switch(memberName)
 		{
 			case "keyIdentifier":
-				return new asn1_33();
+				return new OctetString();
 			case "authorityCertIssuer":
 				return [];
 			case "authorityCertSerialNumber":
-				return new asn1_31();
+				return new Integer();
 			default:
 				throw new Error(`Invalid member name for AuthorityKeyIdentifier class: ${memberName}`);
 		}
@@ -18332,10 +11761,10 @@ class AuthorityKeyIdentifier
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_40({
+				new Primitive({
 					name: (names.keyIdentifier || ""),
 					optional: true,
 					idBlock: {
@@ -18343,20 +11772,20 @@ class AuthorityKeyIdentifier
 						tagNumber: 0 // [0]
 					}
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
 					},
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.authorityCertIssuer || ""),
 							value: GeneralName.schema()
 						})
 					]
 				}),
-				new asn1_40({
+				new Primitive({
 					name: (names.authorityCertSerialNumber || ""),
 					optional: true,
 					idBlock: {
@@ -18383,7 +11812,7 @@ class AuthorityKeyIdentifier
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			AuthorityKeyIdentifier.schema({
 				names: {
@@ -18400,13 +11829,13 @@ class AuthorityKeyIdentifier
 
 		//region Get internal properties from parsed schema
 		if("keyIdentifier" in asn1.result)
-			this.keyIdentifier = new asn1_33({ valueHex: asn1.result.keyIdentifier.valueBlock.valueHex });
+			this.keyIdentifier = new OctetString({ valueHex: asn1.result.keyIdentifier.valueBlock.valueHex });
 
 		if("authorityCertIssuer" in asn1.result)
 			this.authorityCertIssuer = Array.from(asn1.result.authorityCertIssuer, element => new GeneralName({ schema: element }));
 
 		if("authorityCertSerialNumber" in asn1.result)
-			this.authorityCertSerialNumber = new asn1_31({ valueHex: asn1.result.authorityCertSerialNumber.valueBlock.valueHex });
+			this.authorityCertSerialNumber = new Integer({ valueHex: asn1.result.authorityCertSerialNumber.valueBlock.valueHex });
 		//endregion
 	}
 	//**********************************************************************************
@@ -18421,7 +11850,7 @@ class AuthorityKeyIdentifier
 		
 		if("keyIdentifier" in this)
 		{
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -18432,7 +11861,7 @@ class AuthorityKeyIdentifier
 		
 		if("authorityCertIssuer" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 1 // [1]
@@ -18443,7 +11872,7 @@ class AuthorityKeyIdentifier
 		
 		if("authorityCertSerialNumber" in this)
 		{
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 2 // [2]
@@ -18454,7 +11883,7 @@ class AuthorityKeyIdentifier
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -18561,10 +11990,10 @@ class PolicyConstraints
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_40({
+				new Primitive({
 					name: (names.requireExplicitPolicy || ""),
 					optional: true,
 					idBlock: {
@@ -18572,7 +12001,7 @@ class PolicyConstraints
 						tagNumber: 0 // [0]
 					}
 				}), // IMPLICIT integer value
-				new asn1_40({
+				new Primitive({
 					name: (names.inhibitPolicyMapping || ""),
 					optional: true,
 					idBlock: {
@@ -18598,7 +12027,7 @@ class PolicyConstraints
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PolicyConstraints.schema({
 				names: {
@@ -18621,7 +12050,7 @@ class PolicyConstraints
 			field1.idBlock.tagNumber = 2; // INTEGER
 
 			const ber1 = field1.toBER(false);
-			const int1 = asn1_1(ber1);
+			const int1 = fromBER(ber1);
 
 			this.requireExplicitPolicy = int1.result.valueBlock.valueDec;
 		}
@@ -18634,7 +12063,7 @@ class PolicyConstraints
 			field2.idBlock.tagNumber = 2; // INTEGER
 
 			const ber2 = field2.toBER(false);
-			const int2 = asn1_1(ber2);
+			const int2 = fromBER(ber2);
 
 			this.inhibitPolicyMapping = int2.result.valueBlock.valueDec;
 		}
@@ -18652,7 +12081,7 @@ class PolicyConstraints
 		
 		if("requireExplicitPolicy" in this)
 		{
-			const int1 = new asn1_31({ value: this.requireExplicitPolicy });
+			const int1 = new Integer({ value: this.requireExplicitPolicy });
 			
 			int1.idBlock.tagClass = 3; // CONTEXT-SPECIFIC
 			int1.idBlock.tagNumber = 0; // [0]
@@ -18662,7 +12091,7 @@ class PolicyConstraints
 		
 		if("inhibitPolicyMapping" in this)
 		{
-			const int2 = new asn1_31({ value: this.inhibitPolicyMapping });
+			const int2 = new Integer({ value: this.inhibitPolicyMapping });
 			
 			int2.idBlock.tagClass = 3; // CONTEXT-SPECIFIC
 			int2.idBlock.tagNumber = 1; // [1]
@@ -18672,7 +12101,7 @@ class PolicyConstraints
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -18763,12 +12192,12 @@ class ExtKeyUsage
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.keyPurposes || ""),
-					value: new asn1_29()
+					value: new ObjectIdentifier()
 				})
 			]
 		}));
@@ -18787,7 +12216,7 @@ class ExtKeyUsage
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			ExtKeyUsage.schema({
 				names: {
@@ -18812,8 +12241,8 @@ class ExtKeyUsage
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
-			value: Array.from(this.keyPurposes, element => new asn1_29({ value: element }))
+		return (new Sequence({
+			value: Array.from(this.keyPurposes, element => new ObjectIdentifier({ value: element }))
 		}));
 		//endregion
 	}
@@ -18896,10 +12325,10 @@ class InfoAccess
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.accessDescriptions || ""),
 					value: AccessDescription.schema()
 				})
@@ -18920,7 +12349,7 @@ class InfoAccess
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			InfoAccess.schema({
 				names: {
@@ -18945,7 +12374,7 @@ class InfoAccess
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: Array.from(this.accessDescriptions, element => element.toSchema())
 		}));
 		//endregion
@@ -18960,2843 +12389,6 @@ class InfoAccess
 		return {
 			accessDescriptions: Array.from(this.accessDescriptions, element => element.toJSON())
 		};
-	}
-	//**********************************************************************************
-}
-//**************************************************************************************
-
-/*
- * Copyright (c) 2016-2018, Peculiar Ventures
- * All rights reserved.
- *
- * Author 2016-2018, Yury Strozhevsky <www.strozhevsky.com>.
- *
- */
-//**************************************************************************************
-class ByteStream
-{
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleLoopsJS
-	/**
-	 * Constructor for ByteStream class
-	 * @param {{[length]: number, [stub]: number, [view]: Uint8Array, [buffer]: ArrayBuffer, [string]: string, [hexstring]: string}} parameters
-	 */
-	constructor(parameters = {})
-	{
-		this.clear();
-		
-		for(const key of Object.keys(parameters))
-		{
-			switch(key)
-			{
-				case "length":
-					this.length = parameters.length;
-					break;
-				case "stub":
-					// noinspection NonBlockStatementBodyJS
-					for(let i = 0; i < this._view.length; i++)
-						this._view[i] = parameters.stub;
-					break;
-				case "view":
-					this.fromUint8Array(parameters.view);
-					break;
-				case "buffer":
-					this.fromArrayBuffer(parameters.buffer);
-					break;
-				case "string":
-					this.fromString(parameters.string);
-					break;
-				case "hexstring":
-					this.fromHexString(parameters.hexstring);
-					break;
-			}
-		}
-	}
-	//**********************************************************************************
-	/**
-	 * Setter for "buffer"
-	 * @param {ArrayBuffer} value
-	 */
-	set buffer(value)
-	{
-		this._buffer = value.slice(0);
-		this._view = new Uint8Array(this._buffer);
-	}
-	//**********************************************************************************
-	/**
-	 * Getter for "buffer"
-	 * @returns {ArrayBuffer}
-	 */
-	get buffer()
-	{
-		return this._buffer;
-	}
-	//**********************************************************************************
-	/**
-	 * Setter for "view"
-	 * @param {Uint8Array} value
-	 */
-	set view(value)
-	{
-		this._buffer = new ArrayBuffer(value.length);
-		this._view = new Uint8Array(this._buffer);
-		
-		this._view.set(value);
-	}
-	//**********************************************************************************
-	/**
-	 * Getter for "view"
-	 * @returns {Uint8Array}
-	 */
-	get view()
-	{
-		return this._view;
-	}
-	//**********************************************************************************
-	/**
-	 * Getter for "length"
-	 * @returns {number}
-	 */
-	get length()
-	{
-		return this._buffer.byteLength;
-	}
-	//**********************************************************************************
-	/**
-	 * Setter for "length"
-	 * @param {number} value
-	 */
-	set length(value)
-	{
-		this._buffer = new ArrayBuffer(value);
-		this._view = new Uint8Array(this._buffer);
-	}
-	//**********************************************************************************
-	/**
-	 * Clear existing stream
-	 */
-	clear()
-	{
-		this._buffer = new ArrayBuffer(0);
-		this._view = new Uint8Array(this._buffer);
-	}
-	//**********************************************************************************
-	/**
-	 * Initialize "Stream" object from existing "ArrayBuffer"
-	 * @param {!ArrayBuffer} array The ArrayBuffer to copy from
-	 */
-	fromArrayBuffer(array)
-	{
-		this.buffer = array;
-	}
-	//**********************************************************************************
-	// noinspection FunctionNamingConventionJS
-	/**
-	 * Initialize "Stream" object from existing "Uint8Array"
-	 * @param {!Uint8Array} array The Uint8Array to copy from
-	 */
-	fromUint8Array(array)
-	{
-		this._buffer = new ArrayBuffer(array.length);
-		this._view = new Uint8Array(this._buffer);
-		
-		this._view.set(array);
-	}
-	//**********************************************************************************
-	/**
-	 * Initialize "Stream" object from existing string
-	 * @param {string} string The string to initialize from
-	 */
-	fromString(string)
-	{
-		const stringLength = string.length;
-		
-		this.length = stringLength;
-		
-		// noinspection NonBlockStatementBodyJS
-		for(let i = 0; i < stringLength; i++)
-			this.view[i] = string.charCodeAt(i);
-	}
-	//**********************************************************************************
-	/**
-	 * Represent "Stream" object content as a string
-	 * @param {number} [start] Start position to convert to string
-	 * @param {number} [length] Length of array to convert to string
-	 * @returns {string}
-	 */
-	toString(start = 0, length = (this.view.length - start))
-	{
-		//region Initial variables
-		let result = "";
-		//endregion
-		
-		//region Check input parameters
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if((start >= this.view.length) || (start < 0))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = 0;
-		}
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if((length >= this.view.length) || (length < 0))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.view.length - start;
-		}
-		//endregion
-		
-		//region Convert array of bytes to string
-		// noinspection NonBlockStatementBodyJS
-		for(let i = start; i < (start + length); i++)
-			result += String.fromCharCode(this.view[i]);
-		//endregion
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection FunctionTooLongJS
-	/**
-	 * Initialize "Stream" object from existing hexdecimal string
-	 * @param {string} hexString String to initialize from
-	 */
-	fromHexString(hexString)
-	{
-		//region Initial variables
-		const stringLength = hexString.length;
-		
-		this.buffer = new ArrayBuffer(stringLength >> 1);
-		this.view = new Uint8Array(this.buffer);
-		
-		const hexMap = new Map();
-		
-		// noinspection MagicNumberJS
-		hexMap.set("0", 0x00);
-		// noinspection MagicNumberJS
-		hexMap.set("1", 0x01);
-		// noinspection MagicNumberJS
-		hexMap.set("2", 0x02);
-		// noinspection MagicNumberJS
-		hexMap.set("3", 0x03);
-		// noinspection MagicNumberJS
-		hexMap.set("4", 0x04);
-		// noinspection MagicNumberJS
-		hexMap.set("5", 0x05);
-		// noinspection MagicNumberJS
-		hexMap.set("6", 0x06);
-		// noinspection MagicNumberJS
-		hexMap.set("7", 0x07);
-		// noinspection MagicNumberJS
-		hexMap.set("8", 0x08);
-		// noinspection MagicNumberJS
-		hexMap.set("9", 0x09);
-		// noinspection MagicNumberJS
-		hexMap.set("A", 0x0A);
-		// noinspection MagicNumberJS
-		hexMap.set("a", 0x0A);
-		// noinspection MagicNumberJS
-		hexMap.set("B", 0x0B);
-		// noinspection MagicNumberJS
-		hexMap.set("b", 0x0B);
-		// noinspection MagicNumberJS
-		hexMap.set("C", 0x0C);
-		// noinspection MagicNumberJS
-		hexMap.set("c", 0x0C);
-		// noinspection MagicNumberJS
-		hexMap.set("D", 0x0D);
-		// noinspection MagicNumberJS
-		hexMap.set("d", 0x0D);
-		// noinspection MagicNumberJS
-		hexMap.set("E", 0x0E);
-		// noinspection MagicNumberJS
-		hexMap.set("e", 0x0E);
-		// noinspection MagicNumberJS
-		hexMap.set("F", 0x0F);
-		// noinspection MagicNumberJS
-		hexMap.set("f", 0x0F);
-		
-		let j = 0;
-		// noinspection MagicNumberJS
-		let temp = 0x00;
-		//endregion
-		
-		//region Convert char-by-char
-		for(let i = 0; i < stringLength; i++)
-		{
-			// noinspection NegatedIfStatementJS
-			if(!(i % 2))
-			{
-				// noinspection NestedFunctionCallJS
-				temp = hexMap.get(hexString.charAt(i)) << 4;
-			}
-			else
-			{
-				// noinspection NestedFunctionCallJS
-				temp |= hexMap.get(hexString.charAt(i));
-				
-				this.view[j] = temp;
-				j++;
-			}
-		}
-		//endregion
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols
-	/**
-	 * Represent "Stream" object content as a hexdecimal string
-	 * @param {number} [start=0] Start position to convert to string
-	 * @param {number} [length=(this.view.length - start)] Length of array to convert to string
-	 * @returns {string}
-	 */
-	toHexString(start = 0, length = (this.view.length - start))
-	{
-		//region Initial variables
-		let result = "";
-		//endregion
-		
-		//region Check input parameters
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if((start >= this.view.length) || (start < 0))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = 0;
-		}
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if((length >= this.view.length) || (length < 0))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.view.length - start;
-		}
-		//endregion
-
-		for(let i = start; i < (start + length); i++)
-		{
-			// noinspection ChainedFunctionCallJS
-			const str = this.view[i].toString(16).toUpperCase();
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, ConditionalExpressionJS, EqualityComparisonWithCoercionJS
-			result = result + ((str.length == 1) ? "0" : "") + str;
-		}
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleReturnPointsJS
-	/**
-	 * Return copy of existing "Stream"
-	 * @param {number} [start=0] Start position of the copy
-	 * @param {number} [length=this.view.length] Length of the copy
-	 * @returns {ByteStream}
-	 */
-	copy(start = 0, length = (this._buffer.byteLength - start))
-	{
-		//region Check input parameters
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		if((start === 0) && (this._buffer.byteLength === 0))
-			return new ByteStream();
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		if((start < 0) || (start > (this._buffer.byteLength - 1)))
-			throw new Error(`Wrong start position: ${start}`);
-		//endregion
-		
-		const stream = new ByteStream();
-		
-		stream._buffer = this._buffer.slice(start, start + length);
-		stream._view = new Uint8Array(stream._buffer);
-		
-		return stream;
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS
-	/**
-	 * Return slice of existing "Stream"
-	 * @param {number} [start=0] Start position of the slice
-	 * @param {number} [end=this._buffer.byteLength] End position of the slice
-	 * @returns {ByteStream}
-	 */
-	slice(start = 0, end = this._buffer.byteLength)
-	{
-		//region Check input parameters
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		if((start === 0) && (this._buffer.byteLength === 0))
-			return new ByteStream();
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		if((start < 0) || (start > (this._buffer.byteLength - 1)))
-			throw new Error(`Wrong start position: ${start}`);
-		//endregion
-		
-		const stream = new ByteStream();
-		
-		stream._buffer = this._buffer.slice(start, end);
-		stream._view = new Uint8Array(stream._buffer);
-		
-		return stream;
-	}
-	//**********************************************************************************
-	/**
-	 * Change size of existing "Stream"
-	 * @param {!number} size Size for new "Stream"
-	 */
-	realloc(size)
-	{
-		//region Initial variables
-		const buffer = new ArrayBuffer(size);
-		const view = new Uint8Array(buffer);
-		//endregion
-		
-		//region Create a new ArrayBuffer content
-		// noinspection NonBlockStatementBodyJS
-		if(size > this._view.length)
-			view.set(this._view);
-		else
-		{
-			// noinspection NestedFunctionCallJS
-			view.set(new Uint8Array(this._buffer, 0, size));
-		}
-		//endregion
-		
-		//region Initialize "Stream" with new "ArrayBuffer"
-		this._buffer = buffer.slice(0);
-		this._view = new Uint8Array(this._buffer);
-		//endregion
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols
-	/**
-	 * Append a new "Stream" content to the current "Stream"
-	 * @param {ByteStream} stream A new "stream" to append to current "stream"
-	 */
-	append(stream)
-	{
-		//region Initial variables
-		const initialSize = this._buffer.byteLength;
-		const streamViewLength = stream._buffer.byteLength;
-		
-		const copyView = stream._view.slice();
-		//endregion
-		
-		//region Re-allocate current internal buffer
-		this.realloc(initialSize + streamViewLength);
-		//endregion
-		
-		//region Copy input stream content to a new place
-		this._view.set(copyView, initialSize);
-		//endregion
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS
-	/**
-	 * Insert "Stream" content to the current "Stream" at specific position
-	 * @param {ByteStream} stream A new "stream" to insert to current "stream"
-	 * @param {number} [start=0] Start position to insert to
-	 * @param {number} [length]
-	 * @returns {boolean}
-	 */
-	insert(stream, start = 0, length = (this._buffer.byteLength - start))
-	{
-		//region Initial variables
-		// noinspection NonBlockStatementBodyJS
-		if(start > (this._buffer.byteLength - 1))
-			return false;
-		
-		if(length > (this._buffer.byteLength - start))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this._buffer.byteLength - start;
-		}
-		//endregion
-		
-		//region Check input variables
-		if(length > stream._buffer.byteLength)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = stream._buffer.byteLength;
-		}
-		//endregion
-		
-		//region Update content of the current stream
-		// noinspection NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-		if(length == stream._buffer.byteLength)
-			this._view.set(stream._view, start);
-		else
-		{
-			// noinspection NestedFunctionCallJS
-			this._view.set(stream._view.slice(0, length), start);
-		}
-		//endregion
-		
-		return true;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleReturnPointsJS
-	/**
-	 * Check that two "Stream" objects has equal content
-	 * @param {ByteStream} stream Stream to compare with
-	 * @returns {boolean}
-	 */
-	isEqual(stream)
-	{
-		//region Check length of both buffers
-		// noinspection NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-		if(this._buffer.byteLength != stream._buffer.byteLength)
-			return false;
-		//endregion
-		
-		//region Compare each byte of both buffers
-		for(let i = 0; i < stream._buffer.byteLength; i++)
-		{
-			// noinspection NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-			if(this.view[i] != stream.view[i])
-				return false;
-		}
-		//endregion
-		
-		return true;
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS
-	/**
-	 * Check that current "Stream" objects has equal content with input "Uint8Array"
-	 * @param {Uint8Array} view View to compare with
-	 * @returns {boolean}
-	 */
-	isEqualView(view)
-	{
-		//region Check length of both buffers
-		// noinspection NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-		if(view.length != this.view.length)
-			return false;
-		//endregion
-		
-		//region Compare each byte of both buffers
-		for(let i = 0; i < view.length; i++)
-		{
-			// noinspection NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-			if(this.view[i] != view[i])
-				return false;
-		}
-		//endregion
-		
-		return true;
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleLoopsJS, FunctionWithMultipleReturnPointsJS, OverlyComplexFunctionJS, FunctionTooLongJS
-	/**
-	 * Find any byte pattern in "Stream"
-	 * @param {ByteStream} pattern Stream having pattern value
-	 * @param {?number} [start] Start position to search from
-	 * @param {?number} [length] Length of byte block to search at
-	 * @param {boolean} [backward] Flag to search in backward order
-	 * @returns {number}
-	 */
-	findPattern(pattern, start = null, length = null, backward = false)
-	{
-		//region Check input variables
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(start == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS, ConditionalExpressionJS
-			start = (backward) ? this.buffer.byteLength : 0;
-		}
-		
-		if(start > this.buffer.byteLength)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = this.buffer.byteLength;
-		}
-		
-		if(backward)
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-			if(length == null)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = start;
-			}
-			
-			if(length > start)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = start;
-			}
-		}
-		else
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-			if(length == null)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = this.buffer.byteLength - start;
-			}
-			
-			if(length > (this.buffer.byteLength - start))
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = this.buffer.byteLength - start;
-			}
-		}
-		//endregion
-		
-		//region Initial variables
-		const patternLength = pattern.buffer.byteLength;
-		// noinspection NonBlockStatementBodyJS
-		if(patternLength > length)
-			return (-1);
-		//endregion
-		
-		//region Make a "pre-read" array for pattern
-		const patternArray = [];
-		// noinspection NonBlockStatementBodyJS
-		for(let i = 0; i < patternLength; i++)
-			patternArray.push(pattern.view[i]);
-		//endregion
-		
-		//region Search for pattern
-		for(let i = 0; i <= (length - patternLength); i++)
-		{
-			let equal = true;
-			// noinspection ConditionalExpressionJS
-			const equalStart = (backward) ? (start - patternLength - i) : (start + i);
-			
-			for(let j = 0; j < patternLength; j++)
-			{
-				// noinspection EqualityComparisonWithCoercionJS
-				if(this.view[j + equalStart] != patternArray[j])
-				{
-					equal = false;
-					// noinspection BreakStatementJS
-					break;
-				}
-			}
-			
-			if(equal)
-			{
-				// noinspection ConditionalExpressionJS
-				return (backward) ? (start - patternLength - i) : (start + patternLength + i); // Position after the pattern found
-			}
-		}
-		//endregion
-		
-		return (-1);
-	}
-	//**********************************************************************************
-	// noinspection OverlyComplexFunctionJS
-	/**
-	 * Find first position of any pattern from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should be found
-	 * @param {?number} [start] Start position to search from
-	 * @param {?number} [length] Length of byte block to search at
-	 * @param {boolean} [backward=false] Flag to search in backward order
-	 * @returns {{id: number, position: number}}
-	 */
-	findFirstIn(patterns, start = null, length = null, backward = false)
-	{
-		//region Initial variables
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(start == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS, ConditionalExpressionJS
-			start = (backward) ? this.buffer.byteLength : 0;
-		}
-		
-		if(start > this.buffer.byteLength)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = this.buffer.byteLength;
-		}
-		
-		if(backward)
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-			if(length == null)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = start;
-			}
-			
-			if(length > start)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = start;
-			}
-		}
-		else
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-			if(length == null)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = this.buffer.byteLength - start;
-			}
-			
-			if(length > (this.buffer.byteLength - start))
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = this.buffer.byteLength - start;
-			}
-		}
-		
-		// noinspection ConditionalExpressionJS
-		const result = {
-			id: (-1),
-			position: (backward) ? 0 : (start + length),
-			length: 0
-		};
-		//endregion
-		
-		for(let i = 0; i < patterns.length; i++)
-		{
-			const position = this.findPattern(patterns[i], start, length, backward);
-			// noinspection EqualityComparisonWithCoercionJS
-			if(position != (-1))
-			{
-				let valid = false;
-				const patternLength = patterns[i].length;
-
-				if(backward)
-				{
-					// noinspection NonBlockStatementBodyJS
-					if((position - patternLength) >= (result.position - result.length))
-						valid = true;
-				}
-				else
-				{
-					// noinspection NonBlockStatementBodyJS
-					if((position - patternLength) <= (result.position - result.length))
-						valid = true;
-				}
-				
-				if(valid)
-				{
-					result.position = position;
-					result.id = i;
-					result.length = patternLength;
-				}
-			}
-		}
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleReturnPointsJS
-	/**
-	 * Find all positions of any pattern from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should be found
-	 * @param {?number} [start] Start position to search from
-	 * @param {?number} [length] Length of byte block to search at
-	 * @returns {Array}
-	 */
-	findAllIn(patterns, start = 0, length = (this.buffer.byteLength - start))
-	{
-		//region Initial variables
-		const result = [];
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(start == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = 0;
-		}
-		
-		// noinspection NonBlockStatementBodyJS
-		if(start > (this.buffer.byteLength - 1))
-			return result;
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(length == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-
-		if(length > (this.buffer.byteLength - start))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-		
-		let patternFound = {
-			id: (-1),
-			position: start
-		};
-		//endregion
-		
-		//region Find all accurences of patterns
-		do
-		{
-			const position = patternFound.position;
-			
-			patternFound = this.findFirstIn(patterns, patternFound.position, length);
-			
-			// noinspection EqualityComparisonWithCoercionJS
-			if(patternFound.id == (-1))
-			{
-				// noinspection BreakStatementJS
-				break;
-			}
-			
-			// noinspection AssignmentToFunctionParameterJS
-			length -= (patternFound.position - position);
-			
-			result.push({
-				id: patternFound.id,
-				position: patternFound.position
-			});
-		} while(true); // eslint-disable-line
-		//endregion
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleLoopsJS, FunctionWithMultipleReturnPointsJS
-	/**
-	 * Find all positions of a pattern
-	 * @param {ByteStream} pattern Stream having pattern value
-	 * @param {?number} [start] Start position to search from
-	 * @param {?number} [length] Length of byte block to search at
-	 * @returns {Array|number} Array with all pattern positions or (-1) if failed
-	 */
-	findAllPatternIn(pattern, start = 0, length = (this.buffer.byteLength - start))
-	{
-		//region Check input variables
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(start == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = 0;
-		}
-		
-		if(start > this.buffer.byteLength)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = this.buffer.byteLength;
-		}
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(length == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-		
-		if(length > (this.buffer.byteLength - start))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-		//endregion
-		
-		//region Initial variables
-		const result = [];
-		
-		const patternLength = pattern.buffer.byteLength;
-		// noinspection NonBlockStatementBodyJS
-		if(patternLength > length)
-			return (-1);
-		//endregion
-		
-		//region Make a "pre-read" array for pattern
-		const patternArray = Array.from(pattern.view);
-		//endregion
-		
-		//region Search for pattern
-		for(let i = 0; i <= (length - patternLength); i++)
-		{
-			let equal = true;
-			const equalStart = start + i;
-			
-			for(let j = 0; j < patternLength; j++)
-			{
-				// noinspection EqualityComparisonWithCoercionJS
-				if(this.view[j + equalStart] != patternArray[j])
-				{
-					equal = false;
-					// noinspection BreakStatementJS
-					break;
-				}
-			}
-			
-			if(equal)
-			{
-				result.push(start + patternLength + i); // Position after the pattern found
-				i += (patternLength - 1); // On next step of "for" we will have "i++"
-			}
-		}
-		//endregion
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection OverlyComplexFunctionJS, FunctionTooLongJS
-	/**
-	 * Find first position of data, not included in patterns from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should be ommited
-	 * @param {?number} [start] Start position to search from
-	 * @param {?number} [length] Length of byte block to search at
-	 * @param {boolean} [backward=false] Flag to search in backward order
-	 * @returns {{left: {id: number, position: *}, right: {id: number, position: number}, value: ByteStream}}
-	 */
-	findFirstNotIn(patterns, start = null, length = null, backward = false)
-	{
-		//region Initial variables
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(start == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS, ConditionalExpressionJS
-			start = (backward) ? this.buffer.byteLength : 0;
-		}
-		
-		if(start > this.buffer.byteLength)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = this.buffer.byteLength;
-		}
-		
-		if(backward)
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-			if(length == null)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = start;
-			}
-			
-			if(length > start)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = start;
-			}
-		}
-		else
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-			if(length == null)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = this.buffer.byteLength - start;
-			}
-			
-			if(length > (this.buffer.byteLength - start))
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = this.buffer.byteLength - start;
-			}
-		}
-		
-		const result = {
-			left: {
-				id: (-1),
-				position: start
-			},
-			right: {
-				id: (-1),
-				position: 0
-			},
-			value: new ByteStream()
-		};
-		
-		let currentLength = length;
-		//endregion
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		while(currentLength > 0)
-		{
-			//region Search for nearest "pattern"
-			// noinspection ConditionalExpressionJS
-			result.right = this.findFirstIn(patterns,
-				(backward) ? (start - length + currentLength) : (start + length - currentLength),
-				currentLength,
-				backward);
-			//endregion
-			
-			//region No pattern at all
-			// noinspection EqualityComparisonWithCoercionJS
-			if(result.right.id == (-1))
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = currentLength;
-				
-				if(backward)
-				{
-					// noinspection AssignmentToFunctionParameterJS
-					start -= length;
-				}
-				else
-				{
-					// noinspection AssignmentToFunctionParameterJS
-					start = result.left.position;
-				}
-				
-				result.value = new ByteStream();
-				
-				result.value._buffer = this._buffer.slice(start, start + length);
-				result.value._view = new Uint8Array(result.value._buffer);
-				
-				// noinspection BreakStatementJS
-				break;
-			}
-			//endregion
-			
-			//region Check distance between two patterns
-			// noinspection ConditionalExpressionJS, EqualityComparisonWithCoercionJS
-			if(result.right.position != ((backward) ? (result.left.position - patterns[result.right.id].buffer.byteLength) : (result.left.position + patterns[result.right.id].buffer.byteLength)))
-			{
-				if(backward)
-				{
-					// noinspection AssignmentToFunctionParameterJS
-					start = result.right.position + patterns[result.right.id].buffer.byteLength;
-					// noinspection AssignmentToFunctionParameterJS
-					length = result.left.position - result.right.position - patterns[result.right.id].buffer.byteLength;
-				}
-				else
-				{
-					// noinspection AssignmentToFunctionParameterJS
-					start = result.left.position;
-					// noinspection AssignmentToFunctionParameterJS
-					length = result.right.position - result.left.position - patterns[result.right.id].buffer.byteLength;
-				}
-				
-				result.value = new ByteStream();
-				
-				result.value._buffer = this._buffer.slice(start, start + length);
-				result.value._view = new Uint8Array(result.value._buffer);
-				
-				// noinspection BreakStatementJS
-				break;
-			}
-			//endregion
-			
-			//region Store information about previous pattern
-			result.left = result.right;
-			//endregion
-			
-			//region Change current length
-			currentLength -= patterns[result.right.id]._buffer.byteLength;
-			//endregion
-		}
-		
-		//region Swap "patterns" in case of backward order
-		if(backward)
-		{
-			const temp = result.right;
-			result.right = result.left;
-			result.left = temp;
-		}
-		//endregion
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleReturnPointsJS
-	/**
-	 * Find all positions of data, not included in patterns from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should be ommited
-	 * @param {?number} [start] Start position to search from
-	 * @param {?number} [length] Length of byte block to search at
-	 * @returns {Array}
-	 */
-	findAllNotIn(patterns, start = null, length = null)
-	{
-		//region Initial variables
-		const result = [];
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(start == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = 0;
-		}
-		
-		// noinspection NonBlockStatementBodyJS
-		if(start > (this.buffer.byteLength - 1))
-			return result;
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(length == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-		
-		if(length > (this.buffer.byteLength - start))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-		
-		let patternFound = {
-			left: {
-				id: (-1),
-				position: start
-			},
-			right: {
-				id: (-1),
-				position: start
-			},
-			value: new ByteStream()
-		};
-		//endregion
-		
-		//region Find all accurences of patterns
-		// noinspection EqualityComparisonWithCoercionJS
-		do
-		{
-			const position = patternFound.right.position;
-			
-			patternFound = this.findFirstNotIn(patterns, patternFound.right.position, length);
-			
-			// noinspection AssignmentToFunctionParameterJS
-			length -= (patternFound.right.position - position);
-			
-			result.push({
-				left: {
-					id: patternFound.left.id,
-					position: patternFound.left.position
-				},
-				right: {
-					id: patternFound.right.id,
-					position: patternFound.right.position
-				},
-				value: patternFound.value
-			});
-		} while(patternFound.right.id != (-1));
-		//endregion
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleReturnPointsJS, OverlyComplexFunctionJS
-	/**
-	 * Find position of a sequence of any patterns from input array
-	 * @param {Array.<ByteStream>} patterns Array of pattern to look for
-	 * @param {?number} [start] Start position to search from
-	 * @param {?number} [length] Length of byte block to search at
-	 * @param {boolean} [backward=false] Flag to search in backward order
-	 * @returns {*}
-	 */
-	findFirstSequence(patterns, start = null, length = null, backward = false)
-	{
-		//region Initial variables
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(start == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS, ConditionalExpressionJS
-			start = (backward) ? this.buffer.byteLength : 0;
-		}
-		
-		if(start > this.buffer.byteLength)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = this.buffer.byteLength;
-		}
-		
-		if(backward)
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-			if(length == null)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = start;
-			}
-			
-			if(length > start)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = start;
-			}
-		}
-		else
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-			if(length == null)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = this.buffer.byteLength - start;
-			}
-			
-			if(length > (this.buffer.byteLength - start))
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = this.buffer.byteLength - start;
-			}
-		}
-		//endregion
-		
-		//region Find first byte from sequence
-		const firstIn = this.skipNotPatterns(patterns, start, length, backward);
-		// noinspection EqualityComparisonWithCoercionJS
-		if(firstIn == (-1))
-		{
-			return {
-				position: (-1),
-				value: new ByteStream()
-			};
-		}
-		//endregion
-		
-		//region Find first byte not in sequence
-		// noinspection ConditionalExpressionJS
-		const firstNotIn = this.skipPatterns(patterns,
-			firstIn,
-			length - ((backward) ? (start - firstIn) : (firstIn - start)),
-			backward);
-		//endregion
-		
-		//region Make output value
-		if(backward)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = firstNotIn;
-			// noinspection AssignmentToFunctionParameterJS
-			length = (firstIn - firstNotIn);
-		}
-		else
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = firstIn;
-			// noinspection AssignmentToFunctionParameterJS
-			length = (firstNotIn - firstIn);
-		}
-		
-		const value = new ByteStream();
-		
-		value._buffer = this._buffer.slice(start, start + length);
-		value._view = new Uint8Array(value._buffer);
-		//endregion
-		
-		return {
-			position: firstNotIn,
-			value
-		};
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleReturnPointsJS
-	/**
-	 * Find all positions of a sequence of any patterns from input array
-	 * @param {Array.<ByteStream>} patterns Array of patterns to search for
-	 * @param {?number} [start] Start position to search from
-	 * @param {?number} [length] Length of byte block to search at
-	 * @returns {Array}
-	 */
-	findAllSequences(patterns, start = null, length = null)
-	{
-		//region Initial variables
-		const result = [];
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(start == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = 0;
-		}
-		
-		// noinspection NonBlockStatementBodyJS
-		if(start > (this.buffer.byteLength - 1))
-			return result;
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(length == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-		
-		if(length > (this.buffer.byteLength - start))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-		
-		let patternFound = {
-			position: start,
-			value: new ByteStream()
-		};
-		//endregion
-		
-		//region Find all accurences of patterns
-		// noinspection EqualityComparisonWithCoercionJS
-		do
-		{
-			const position = patternFound.position;
-			
-			patternFound = this.findFirstSequence(patterns, patternFound.position, length);
-			
-			// noinspection EqualityComparisonWithCoercionJS
-			if(patternFound.position != (-1))
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length -= (patternFound.position - position);
-				
-				result.push({
-					position: patternFound.position,
-					value: patternFound.value
-				});
-			}
-			
-		} while(patternFound.position != (-1));
-		//endregion
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleLoopsJS, FunctionWithMultipleReturnPointsJS, OverlyComplexFunctionJS, FunctionTooLongJS
-	/**
-	 * Find all paired patterns in the stream
-	 * @param {ByteStream} leftPattern Left pattern to search for
-	 * @param {ByteStream} rightPattern Right pattern to search for
-	 * @param {?number} [start=null] Start position to search from
-	 * @param {?number} [length=null] Length of byte block to search at
-	 * @returns {Array}
-	 */
-	findPairedPatterns(leftPattern, rightPattern, start = null, length = null)
-	{
-		//region Initial variables
-		const result = [];
-		
-		// noinspection NonBlockStatementBodyJS
-		if(leftPattern.isEqual(rightPattern))
-			return result;
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(start == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = 0;
-		}
-		
-		// noinspection NonBlockStatementBodyJS
-		if(start > (this.buffer.byteLength - 1))
-			return result;
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(length == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-		
-		if(length > (this.buffer.byteLength - start))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-		
-		let currentPositionLeft = 0;
-		//endregion
-		
-		//region Find all "left patterns" as sorted array
-		const leftPatterns = this.findAllPatternIn(leftPattern, start, length);
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-		if(leftPatterns.length == 0)
-			return result;
-		//endregion
-		
-		//region Find all "right patterns" as sorted array
-		const rightPatterns = this.findAllPatternIn(rightPattern, start, length);
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-		if(rightPatterns.length == 0)
-			return result;
-		//endregion
-		
-		//region Combine patterns
-		while(currentPositionLeft < leftPatterns.length)
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, EqualityComparisonWithCoercionJS
-			if(rightPatterns.length == 0)
-			{
-				// noinspection BreakStatementJS
-				break;
-			}
-			
-			// noinspection EqualityComparisonWithCoercionJS
-			if(leftPatterns[0] == rightPatterns[0])
-			{
-				// Possible situation when one pattern is a part of another
-				// For example "stream" and "endstream"
-				// In case when we have only "endstream" in fact "stream" will be also found at the same position
-				// (position of the pattern is an index AFTER the pattern)
-				
-				result.push({
-					left: leftPatterns[0],
-					right: rightPatterns[0]
-				});
-				
-				leftPatterns.splice(0, 1);
-				rightPatterns.splice(0, 1);
-				
-				// noinspection ContinueStatementJS
-				continue;
-			}
-			
-			if(leftPatterns[currentPositionLeft] > rightPatterns[0])
-			{
-				// noinspection BreakStatementJS
-				break;
-			}
-			
-			while(leftPatterns[currentPositionLeft] < rightPatterns[0])
-			{
-				currentPositionLeft++;
-				
-				if(currentPositionLeft >= leftPatterns.length)
-				{
-					// noinspection BreakStatementJS
-					break;
-				}
-			}
-			
-			result.push({
-				left: leftPatterns[currentPositionLeft - 1],
-				right: rightPatterns[0]
-			});
-			
-			leftPatterns.splice(currentPositionLeft - 1, 1);
-			rightPatterns.splice(0, 1);
-			
-			currentPositionLeft = 0;
-		}
-		//endregion
-		
-		//region Sort result
-		result.sort((a, b) => (a.left - b.left));
-		//endregion
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleLoopsJS, FunctionWithMultipleReturnPointsJS, OverlyComplexFunctionJS, FunctionTooLongJS
-	/**
-	 * Find all paired patterns in the stream
-	 * @param {Array.<ByteStream>} inputLeftPatterns Array of left patterns to search for
-	 * @param {Array.<ByteStream>} inputRightPatterns Array of right patterns to search for
-	 * @param {?number} [start=null] Start position to search from
-	 * @param {?number} [length=null] Length of byte block to search at
-	 * @returns {Array}
-	 */
-	findPairedArrays(inputLeftPatterns, inputRightPatterns, start = null, length = null)
-	{
-		//region Initial variables
-		const result = [];
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(start == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = 0;
-		}
-		
-		// noinspection NonBlockStatementBodyJS
-		if(start > (this.buffer.byteLength - 1))
-			return result;
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(length == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-		
-		if(length > (this.buffer.byteLength - start))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-		
-		let currentPositionLeft = 0;
-		//endregion
-		
-		//region Find all "left patterns" as sorted array
-		const leftPatterns = this.findAllIn(inputLeftPatterns, start, length);
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-		if(leftPatterns.length == 0)
-			return result;
-		//endregion
-		
-		//region Find all "right patterns" as sorted array
-		const rightPatterns = this.findAllIn(inputRightPatterns, start, length);
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-		if(rightPatterns.length == 0)
-			return result;
-		//endregion
-		
-		//region Combine patterns
-		while(currentPositionLeft < leftPatterns.length)
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, EqualityComparisonWithCoercionJS
-			if(rightPatterns.length == 0)
-			{
-				// noinspection BreakStatementJS
-				break;
-			}
-			
-			// noinspection EqualityComparisonWithCoercionJS
-			if(leftPatterns[0].position == rightPatterns[0].position)
-			{
-				// Possible situation when one pattern is a part of another
-				// For example "stream" and "endstream"
-				// In case when we have only "endstream" in fact "stream" will be also found at the same position
-				// (position of the pattern is an index AFTER the pattern)
-				
-				result.push({
-					left: leftPatterns[0],
-					right: rightPatterns[0]
-				});
-				
-				leftPatterns.splice(0, 1);
-				rightPatterns.splice(0, 1);
-				
-				// noinspection ContinueStatementJS
-				continue;
-			}
-			
-			if(leftPatterns[currentPositionLeft].position > rightPatterns[0].position)
-			{
-				// noinspection BreakStatementJS
-				break;
-			}
-			
-			while(leftPatterns[currentPositionLeft].position < rightPatterns[0].position)
-			{
-				currentPositionLeft++;
-				
-				if(currentPositionLeft >= leftPatterns.length)
-				{
-					// noinspection BreakStatementJS
-					break;
-				}
-			}
-			
-			result.push({
-				left: leftPatterns[currentPositionLeft - 1],
-				right: rightPatterns[0]
-			});
-			
-			leftPatterns.splice(currentPositionLeft - 1, 1);
-			rightPatterns.splice(0, 1);
-			
-			currentPositionLeft = 0;
-		}
-		//endregion
-		
-		//region Sort result
-		result.sort((a, b) => (a.left.position - b.left.position));
-		//endregion
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleReturnPointsJS, FunctionTooLongJS
-	/**
-	 * Replace one patter with other
-	 * @param {ByteStream} searchPattern The pattern to search for
-	 * @param {ByteStream} replacePattern The pattern to replace initial pattern
-	 * @param {?number} [start=null] Start position to search from
-	 * @param {?number} [length=null] Length of byte block to search at
-	 * @param {Array|null} [findAllResult=null] Pre-calculated results of "findAllIn"
-	 * @returns {*}
-	 */
-	replacePattern(searchPattern, replacePattern, start = null, length = null, findAllResult = null)
-	{
-		//region Initial variables
-		let result;
-		
-		let i;
-		const output = {
-			status: (-1),
-			searchPatternPositions: [],
-			replacePatternPositions: []
-		};
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(start == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = 0;
-		}
-		
-		// noinspection NonBlockStatementBodyJS
-		if(start > (this.buffer.byteLength - 1))
-			return false;
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(length == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-		
-		if(length > (this.buffer.byteLength - start))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this.buffer.byteLength - start;
-		}
-		//endregion
-		
-		//region Find a pattern to search for
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		if(findAllResult == null)
-		{
-			result = this.findAllIn([searchPattern], start, length);
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-			if(result.length == 0)
-				return output;
-		}
-		else
-			result = findAllResult;
-		
-		// noinspection NestedFunctionCallJS
-		output.searchPatternPositions.push(...Array.from(result, element => element.position));
-		//endregion
-		
-		//region Variables for new buffer initialization
-		const patternDifference = searchPattern.buffer.byteLength - replacePattern.buffer.byteLength;
-		
-		const changedBuffer = new ArrayBuffer(this.view.length - (result.length * patternDifference));
-		const changedView = new Uint8Array(changedBuffer);
-		//endregion
-		
-		//region Copy data from 0 to start
-		// noinspection NestedFunctionCallJS
-		changedView.set(new Uint8Array(this.buffer, 0, start));
-		//endregion
-		
-		//region Replace pattern
-		for(i = 0; i < result.length; i++)
-		{
-			//region Initial variables
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, ConditionalExpressionJS, EqualityComparisonWithCoercionJS
-			const currentPosition = (i == 0) ? start : result[i - 1].position;
-			//endregion
-			
-			//region Copy bytes other then search pattern
-			// noinspection NestedFunctionCallJS
-			changedView.set(new Uint8Array(this.buffer, currentPosition, result[i].position - searchPattern.buffer.byteLength - currentPosition), currentPosition - i * patternDifference);
-			//endregion
-			
-			//region Put replace pattern in a new buffer
-			changedView.set(replacePattern.view, result[i].position - searchPattern.buffer.byteLength - i * patternDifference);
-			
-			output.replacePatternPositions.push(result[i].position - searchPattern.buffer.byteLength - i * patternDifference);
-			//endregion
-		}
-		//endregion
-		
-		//region Copy data from the end of old buffer
-		i--;
-		// noinspection NestedFunctionCallJS
-		changedView.set(new Uint8Array(this.buffer, result[i].position, this.buffer.byteLength - result[i].position), result[i].position - searchPattern.buffer.byteLength + replacePattern.buffer.byteLength - i * patternDifference);
-		//endregion
-		
-		//region Re-initialize existing buffer
-		this.buffer = changedBuffer;
-		this.view = new Uint8Array(this.buffer);
-		//endregion
-		
-		output.status = 1;
-		
-		return output;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleLoopsJS, FunctionWithMultipleReturnPointsJS, OverlyComplexFunctionJS, FunctionTooLongJS
-	/**
-	 * Skip any pattern from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should be ommited
-	 * @param {?number} [start=null] Start position to search from
-	 * @param {?number} [length=null] Length of byte block to search at
-	 * @param {boolean} [backward=false] Flag to search in backward order
-	 * @returns {*}
-	 */
-	skipPatterns(patterns, start = null, length = null, backward = false)
-	{
-		//region Initial variables
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(start == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS, ConditionalExpressionJS
-			start = (backward) ? this.buffer.byteLength : 0;
-		}
-		
-		if(start > this.buffer.byteLength)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = this.buffer.byteLength;
-		}
-		
-		if(backward)
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-			if(length == null)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = start;
-			}
-			
-			if(length > start)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = start;
-			}
-		}
-		else
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-			if(length == null)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = this.buffer.byteLength - start;
-			}
-			
-			if(length > (this.buffer.byteLength - start))
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = this.buffer.byteLength - start;
-			}
-		}
-		
-		let result = start;
-		//endregion
-		
-		//region Search for pattern
-		for(let k = 0; k < patterns.length; k++)
-		{
-			const patternLength = patterns[k].buffer.byteLength;
-			// noinspection ConditionalExpressionJS
-			const equalStart = (backward) ? (result - patternLength) : (result);
-			let equal = true;
-			
-			for(let j = 0; j < patternLength; j++)
-			{
-				// noinspection EqualityComparisonWithCoercionJS
-				if(this.view[j + equalStart] != patterns[k].view[j])
-				{
-					equal = false;
-					// noinspection BreakStatementJS
-					break;
-				}
-			}
-			
-			if(equal)
-			{
-				k = (-1);
-				
-				if(backward)
-				{
-					result -= patternLength;
-					// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-					if(result <= 0)
-						return result;
-				}
-				else
-				{
-					result += patternLength;
-					// noinspection NonBlockStatementBodyJS
-					if(result >= (start + length))
-						return result;
-				}
-			}
-		}
-		//endregion
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleLoopsJS, OverlyComplexFunctionJS, FunctionTooLongJS
-	/**
-	 * Skip any pattern not from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should not be ommited
-	 * @param start
-	 * @param length
-	 * @param backward
-	 * @returns {number}
-	 */
-	skipNotPatterns(patterns, start = null, length = null, backward = false)
-	{
-		//region Initial variables
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if(start == null)
-		{
-			// noinspection AssignmentToFunctionParameterJS, ConditionalExpressionJS
-			start = (backward) ? this.buffer.byteLength : 0;
-		}
-		
-		if(start > this.buffer.byteLength)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			start = this.buffer.byteLength;
-		}
-		
-		if(backward)
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-			if(length == null)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = start;
-			}
-			
-			if(length > start)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = start;
-			}
-		}
-		else
-		{
-			// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-			if(length == null)
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = this.buffer.byteLength - start;
-			}
-			
-			if(length > (this.buffer.byteLength - start))
-			{
-				// noinspection AssignmentToFunctionParameterJS
-				length = this.buffer.byteLength - start;
-			}
-		}
-		
-		let result = (-1);
-		//endregion
-		
-		//region Search for pattern
-		for(let i = 0; i < length; i++)
-		{
-			for(let k = 0; k < patterns.length; k++)
-			{
-				const patternLength = patterns[k].buffer.byteLength;
-				// noinspection ConditionalExpressionJS
-				const equalStart = (backward) ? (start - i - patternLength) : (start + i);
-				let equal = true;
-				
-				for(let j = 0; j < patternLength; j++)
-				{
-					// noinspection EqualityComparisonWithCoercionJS
-					if(this.view[j + equalStart] != patterns[k].view[j])
-					{
-						equal = false;
-						// noinspection BreakStatementJS
-						break;
-					}
-				}
-				
-				if(equal)
-				{
-					// noinspection ConditionalExpressionJS
-					result = (backward) ? (start - i) : (start + i); // Exact position of pattern found
-					// noinspection BreakStatementJS
-					break;
-				}
-			}
-			
-			// noinspection EqualityComparisonWithCoercionJS
-			if(result != (-1))
-			{
-				// noinspection BreakStatementJS
-				break;
-			}
-		}
-		//endregion
-		
-		return result;
-	}
-	//**********************************************************************************
-}
-//**************************************************************************************
-class SeqStream 
-{
-	//**********************************************************************************
-	/**
-	 * Constructor for "SeqStream" class
-	 * @param {{[stream]: ByteStream, [length]: number, [backward]: boolean, [start]: number, [appendBlock]: number}} parameters
-	 */
-	constructor(parameters = {})
-	{
-		/**
-		 * Major stream
-		 * @type {ByteStream}
-		 */
-		this.stream = new ByteStream();
-		/**
-		 * Length of the major stream
-		 * @type {number}
-		 */
-		this._length = 0;
-		/**
-		 * Flag to search in backward direction
-		 * @type {boolean}
-		 */
-		this.backward = false;
-		/**
-		 * Start position to search
-		 * @type {number}
-		 */
-		this._start = 0;
-		/**
-		 * Length of a block when append information to major stream
-		 * @type {number}
-		 */
-		this.appendBlock = 0;
-		
-		this.prevLength = 0;
-		this.prevStart = 0;
-		
-		for(const key of Object.keys(parameters))
-		{
-			switch(key)
-			{
-				case "stream":
-					this.stream = parameters.stream;
-					break;
-				case "backward":
-					this.backward = parameters.backward;
-					// noinspection JSUnusedGlobalSymbols
-					this._start = this.stream.buffer.byteLength;
-					break;
-				case "length":
-					// noinspection JSUnusedGlobalSymbols
-					this._length = parameters.length;
-					break;
-				case "start":
-					// noinspection JSUnusedGlobalSymbols
-					this._start = parameters.start;
-					break;
-				case "appendBlock":
-					this.appendBlock = parameters.appendBlock;
-					break;
-				case "view":
-					this.stream = new ByteStream({ view: parameters.view});
-					break;
-				case "buffer":
-					this.stream = new ByteStream({ buffer: parameters.buffer});
-					break;
-				case "string":
-					this.stream = new ByteStream({ string: parameters.string});
-					break;
-				case "hexstring":
-					this.stream = new ByteStream({ hexstring: parameters.hexstring});
-					break;
-			}
-		}
-	}
-	//**********************************************************************************
-	/**
-	 * Setter for "stream" property
-	 * @param {ByteStream} value
-	 */
-	set stream(value)
-	{
-		this._stream = value;
-		
-		this.prevLength = this._length;
-		// noinspection JSUnusedGlobalSymbols
-		this._length = value._buffer.byteLength;
-		
-		this.prevStart = this._start;
-		// noinspection JSUnusedGlobalSymbols
-		this._start = 0;
-	}
-	//**********************************************************************************
-	/**
-	 * Getter for "stream" property
-	 * @returns {ByteStream}
-	 */
-	get stream()
-	{
-		return this._stream;
-	}
-	//**********************************************************************************
-	/**
-	 * Setter for "length" property
-	 * @param {number} value
-	 */
-	set length(value)
-	{
-		this.prevLength = this._length;
-		// noinspection JSUnusedGlobalSymbols
-		this._length = value;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleReturnPointsJS
-	/**
-	 * Getter for "length" property
-	 * @returns {number}
-	 */
-	get length()
-	{
-		// noinspection NonBlockStatementBodyJS
-		if(this.appendBlock)
-			return this.start;
-		
-		return this._length;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleReturnPointsJS
-	/**
-	 * Setter for "start" property
-	 * @param {number} value
-	 */
-	set start(value)
-	{
-		// noinspection NonBlockStatementBodyJS
-		if(value > this.stream.buffer.byteLength)
-			return;
-		
-		//region Initialization of "prev" internal variables
-		this.prevStart = this._start;
-		this.prevLength = this._length;
-		//endregion
-		
-		// noinspection JSUnusedGlobalSymbols, ConditionalExpressionJS
-		this._length -= ((this.backward) ? (this._start - value) : (value - this._start));
-		// noinspection JSUnusedGlobalSymbols
-		this._start = value;
-	}
-	//**********************************************************************************
-	/**
-	 * Getter for "start" property
-	 * @returns {number}
-	 */
-	get start()
-	{
-		return this._start;
-	}
-	//**********************************************************************************
-	/**
-	 * Return ArrayBuffer with having value of existing SeqStream length
-	 * @return {ArrayBuffer}
-	 */
-	get buffer()
-	{
-		return this._stream._buffer.slice(0, this._length);
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols
-	/**
-	 * Reset current position of the "SeqStream"
-	 */
-	resetPosition()
-	{
-		// noinspection JSUnusedGlobalSymbols
-		this._start = this.prevStart;
-		// noinspection JSUnusedGlobalSymbols
-		this._length = this.prevLength;
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS
-	/**
-	 * Find any byte pattern in "ByteStream"
-	 * @param {ByteStream} pattern Stream having pattern value
-	 * @param {?number} [gap] Maximum gap between start position and position of nearest object
-	 * @returns {number}
-	 */
-	findPattern(pattern, gap = null)
-	{
-		//region Initial variables
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if((gap == null) || (gap > this.length))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			gap = this.length;
-		}
-		//endregion
-		
-		//region Find pattern
-		const result = this.stream.findPattern(pattern, this.start, this.length, this.backward);
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-		if(result == (-1))
-			return result;
-		
-		if(this.backward)
-		{
-			// noinspection NonBlockStatementBodyJS
-			if(result < (this.start - pattern.buffer.byteLength - gap))
-				return (-1);
-		}
-		else
-		{
-			// noinspection NonBlockStatementBodyJS
-			if(result > (this.start + pattern.buffer.byteLength + gap))
-				return (-1);
-		}
-		//endregion
-		
-		//region Create new values
-		this.start = result;
-		//endregion ;
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS
-	/**
-	 * Find first position of any pattern from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should be found
-	 * @param {?number} [gap] Maximum gap between start position and position of nearest object
-	 * @returns {{id: number, position: number}}
-	 */
-	findFirstIn(patterns, gap = null)
-	{
-		//region Initial variables
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if((gap == null) || (gap > this.length))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			gap = this.length;
-		}
-		//endregion
-		
-		//region Search for patterns
-		const result = this.stream.findFirstIn(patterns, this.start, this.length, this.backward);
-		// noinspection NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-		if(result.id == (-1))
-			return result;
-		
-		if(this.backward)
-		{
-			if(result.position < (this.start - patterns[result.id].buffer.byteLength - gap))
-			{
-				// noinspection ConditionalExpressionJS
-				return {
-					id: (-1),
-					position: (this.backward) ? 0 : (this.start + this.length)
-				};
-			}
-		}
-		else
-		{
-			if(result.position > (this.start + patterns[result.id].buffer.byteLength + gap))
-			{
-				// noinspection ConditionalExpressionJS
-				return {
-					id: (-1),
-					position: (this.backward) ? 0 : (this.start + this.length)
-				};
-			}
-		}
-		//endregion
-		
-		//region Create new values
-		this.start = result.position;
-		//endregion ;
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols
-	/**
-	 * Find all positions of any pattern from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should be found
-	 * @returns {Array}
-	 */
-	findAllIn(patterns)
-	{
-		// In case of "backward order" the start position is at the end on stream.
-		// In case of "normal order" the start position is at the begging of the stream.
-		// But in fact for search for all patterns we need to have start position in "normal order".
-		// noinspection ConditionalExpressionJS
-		const start = (this.backward) ? (this.start - this.length) : this.start;
-		
-		return this.stream.findAllIn(patterns, start, this.length);
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS, OverlyComplexFunctionJS
-	/**
-	 * Find first position of data, not included in patterns from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should be ommited
-	 * @param {?number} gap Maximum gap between start position and position of nearest object
-	 * @returns {*}
-	 */
-	findFirstNotIn(patterns, gap = null)
-	{
-		//region Initial variables
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if((gap == null) || (gap > this._length))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			gap = this._length;
-		}
-		//endregion
-		
-		//region Search for patterns
-		const result = this._stream.findFirstNotIn(patterns, this._start, this._length, this.backward);
-		// noinspection NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-		if((result.left.id == (-1)) && (result.right.id == (-1)))
-			return result;
-		
-		if(this.backward)
-		{
-			// noinspection EqualityComparisonWithCoercionJS
-			if(result.right.id != (-1))
-			{
-				if(result.right.position < (this._start - patterns[result.right.id]._buffer.byteLength - gap))
-				{
-					return {
-						left: {
-							id: (-1),
-							position: this._start
-						},
-						right: {
-							id: (-1),
-							position: 0
-						},
-						value: new ByteStream()
-					};
-				}
-			}
-		}
-		else
-		{
-			// noinspection EqualityComparisonWithCoercionJS
-			if(result.left.id != (-1))
-			{
-				if(result.left.position > (this._start + patterns[result.left.id]._buffer.byteLength + gap))
-				{
-					return {
-						left: {
-							id: (-1),
-							position: this._start
-						},
-						right: {
-							id: (-1),
-							position: 0
-						},
-						value: new ByteStream()
-					};
-				}
-			}
-		}
-		//endregion
-		
-		//region Create new values
-		if(this.backward)
-		{
-			// noinspection NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-			if(result.left.id == (-1))
-				this.start = 0;
-			else
-				this.start = result.left.position;
-		}
-		else
-		{
-			// noinspection NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-			if(result.right.id == (-1))
-				this.start = (this._start + this._length);
-			else
-				this.start = result.right.position;
-		}
-		//endregion ;
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols
-	/**
-	 * Find all positions of data, not included in patterns from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should be ommited
-	 * @returns {Array}
-	 */
-	findAllNotIn(patterns)
-	{
-		// In case of "backward order" the start position is at the end on stream.
-		// In case of "normal order" the start position is at the begging of the stream.
-		// But in fact for search for all patterns we need to have start position in "normal order".
-		// noinspection ConditionalExpressionJS
-		const start = (this.backward) ? (this._start - this._length) : this._start;
-		
-		return this._stream.findAllNotIn(patterns, start, this._length);
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS
-	/**
-	 * Find position of a sequence of any patterns from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should be ommited
-	 * @param {?number} [length] Length to search sequence for
-	 * @param {?number} [gap] Maximum gap between start position and position of nearest object
-	 * @returns {*}
-	 */
-	findFirstSequence(patterns, length = null, gap = null)
-	{
-		//region Initial variables
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if((length == null) || (length > this._length))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			length = this._length;
-		}
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if((gap == null) || (gap > length))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			gap = length;
-		}
-		//endregion
-		
-		//region Search for sequence
-		const result = this._stream.findFirstSequence(patterns, this._start, length, this.backward);
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-		if(result.value.buffer.byteLength == 0)
-			return result;
-		
-		if(this.backward)
-		{
-			if(result.position < (this._start - result.value._buffer.byteLength - gap))
-			{
-				return {
-					position: (-1),
-					value: new ByteStream()
-				};
-			}
-		}
-		else
-		{
-			if(result.position > (this._start + result.value._buffer.byteLength + gap))
-			{
-				return {
-					position: (-1),
-					value: new ByteStream()
-				};
-			}
-		}
-		//endregion
-		
-		//region Create new values
-		this.start = result.position;
-		//endregion ;
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols
-	/**
-	 * Find position of a sequence of any patterns from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should be found
-	 * @returns {Array}
-	 */
-	findAllSequences(patterns)
-	{
-		// In case of "backward order" the start position is at the end on stream.
-		// In case of "normal order" the start position is at the begging of the stream.
-		// But in fact for search for all patterns we need to have start position in "normal order".
-		// noinspection ConditionalExpressionJS
-		const start = (this.backward) ? (this.start - this.length) : this.start;
-		
-		return this.stream.findAllSequences(patterns, start, this.length);
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS
-	/**
-	 * Find all paired patterns in the stream
-	 * @param {ByteStream} leftPattern Left pattern to search for
-	 * @param {ByteStream} rightPattern Right pattern to search for
-	 * @param {?number} [gap] Maximum gap between start position and position of nearest object
-	 * @returns {Array}
-	 */
-	findPairedPatterns(leftPattern, rightPattern, gap = null)
-	{
-		//region Initial variables
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if((gap == null) || (gap > this.length))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			gap = this.length;
-		}
-		//endregion
-		
-		// In case of "backward order" the start position is at the end on stream.
-		// In case of "normal order" the start position is at the begging of the stream.
-		// But in fact for search for all patterns we need to have start position in "normal order".
-		// noinspection ConditionalExpressionJS
-		const start = (this.backward) ? (this.start - this.length) : this.start;
-		
-		//region Search for patterns
-		const result = this.stream.findPairedPatterns(leftPattern, rightPattern, start, this.length);
-		if(result.length)
-		{
-			if(this.backward)
-			{
-				// noinspection NonBlockStatementBodyJS
-				if(result[0].right < (this.start - rightPattern.buffer.byteLength - gap))
-					return [];
-			}
-			else
-			{
-				// noinspection NonBlockStatementBodyJS
-				if(result[0].left > (this.start + leftPattern.buffer.byteLength + gap))
-					return [];
-			}
-		}
-		//endregion
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS
-	/**
-	 * Find all paired patterns in the stream
-	 * @param {Array.<ByteStream>} leftPatterns Array of left patterns to search for
-	 * @param {Array.<ByteStream>} rightPatterns Array of right patterns to search for
-	 * @param {?number} [gap] Maximum gap between start position and position of nearest object
-	 * @returns {Array}
-	 */
-	findPairedArrays(leftPatterns, rightPatterns, gap = null)
-	{
-		//region Initial variables
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS
-		if((gap == null) || (gap > this.length))
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			gap = this.length;
-		}
-		//endregion
-		
-		// In case of "backward order" the start position is at the end on stream.
-		// In case of "normal order" the start position is at the begging of the stream.
-		// But in fact for search for all patterns we need to have start position in "normal order".
-		// noinspection ConditionalExpressionJS
-		const start = (this.backward) ? (this.start - this.length) : this.start;
-		
-		//region Search for patterns
-		const result = this.stream.findPairedArrays(leftPatterns, rightPatterns, start, this.length);
-		if(result.length)
-		{
-			if(this.backward)
-			{
-				// noinspection NonBlockStatementBodyJS
-				if(result[0].right.position < (this.start - rightPatterns[result[0].right.id].buffer.byteLength - gap))
-					return [];
-			}
-			else
-			{
-				// noinspection NonBlockStatementBodyJS
-				if(result[0].left.position > (this.start + leftPatterns[result[0].left.id].buffer.byteLength + gap))
-					return [];
-			}
-		}
-		//endregion
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols
-	/**
-	 * Replace one patter with other
-	 * @param {ByteStream} searchPattern The pattern to search for
-	 * @param {ByteStream} replacePattern The pattern to replace initial pattern
-	 * @returns {*}
-	 */
-	replacePattern(searchPattern, replacePattern)
-	{
-		// In case of "backward order" the start position is at the end on stream.
-		// In case of "normal order" the start position is at the begging of the stream.
-		// But in fact for search for all patterns we need to have start position in "normal order".
-		// noinspection ConditionalExpressionJS
-		const start = (this.backward) ? (this.start - this.length) : this.start;
-		
-		return this.stream.replacePattern(searchPattern, replacePattern, start, this.length);
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols
-	/**
-	 * Skip of any pattern from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should be ommited
-	 * @returns {*}
-	 */
-	skipPatterns(patterns)
-	{
-		const result = this.stream.skipPatterns(patterns, this.start, this.length, this.backward);
-		
-		//region Create new values
-		this.start = result;
-		//endregion ;
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS
-	/**
-	 * Skip of any pattern from input array
-	 * @param {Array.<ByteStream>} patterns Array with patterns which should be ommited
-	 * @returns {number}
-	 */
-	skipNotPatterns(patterns)
-	{
-		const result = this.stream.skipNotPatterns(patterns, this.start, this.length, this.backward);
-		// noinspection NonBlockStatementBodyJS, EqualityComparisonWithCoercionJS
-		if(result == (-1))
-			return (-1);
-		
-		//region Create new values
-		this.start = result;
-		//endregion ;
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols
-	/**
-	 * Append a new "Stream" content to the current "Stream"
-	 * @param {ByteStream} stream A new "stream" to append to current "stream"
-	 */
-	append(stream)
-	{
-		if((this._start + stream._buffer.byteLength) > this._stream._buffer.byteLength)
-		{
-			if(stream._buffer.byteLength > this.appendBlock)
-			{
-				// noinspection MagicNumberJS
-				this.appendBlock = (stream._buffer.byteLength + 1000);
-			}
-			
-			this._stream.realloc(this._stream._buffer.byteLength + this.appendBlock);
-		}
-		
-		this._stream._view.set(stream._view, this._start);
-		
-		this._length += (stream._buffer.byteLength * 2);
-		this.start = (this._start + stream._buffer.byteLength);
-		this.prevLength -= (stream._buffer.byteLength * 2);
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols
-	/**
-	 * Append a "view" content to the current "Stream"
-	 * @param {Uint8Array} view A new "view" to append to current "stream"
-	 */
-	appendView(view)
-	{
-		if((this._start + view.length) > this._stream._buffer.byteLength)
-		{
-			if(view.length > this.appendBlock)
-			{
-				// noinspection MagicNumberJS
-				this.appendBlock = (view.length + 1000);
-			}
-			
-			this._stream.realloc(this._stream._buffer.byteLength + this.appendBlock);
-		}
-		
-		this._stream._view.set(view, this._start);
-		
-		this._length += (view.length * 2);
-		this.start = (this._start + view.length);
-		this.prevLength -= (view.length * 2);
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols
-	/**
-	 * Append a new char to the current "Stream"
-	 * @param {number} char A new char to append to current "stream"
-	 */
-	appendChar(char)
-	{
-		if((this._start + 1) > this._stream._buffer.byteLength)
-		{
-			// noinspection ConstantOnLefSideOfComparisonJS
-			if(1 > this.appendBlock)
-			{
-				// noinspection MagicNumberJS
-				this.appendBlock = 1000;
-			}
-			
-			this._stream.realloc(this._stream._buffer.byteLength + this.appendBlock);
-		}
-		
-		this._stream._view[this._start] = char;
-		
-		this._length += 2;
-		this.start = (this._start + 1);
-		this.prevLength -= 2;
-	}
-	//**********************************************************************************
-	// noinspection FunctionNamingConventionJS
-	/**
-	 * Append a new number to the current "Stream"
-	 * @param {number} number A new unsigned 16-bit integer to append to current "stream"
-	 */
-	appendUint16(number)
-	{
-		if((this._start + 2) > this._stream._buffer.byteLength)
-		{
-			// noinspection ConstantOnLefSideOfComparisonJS
-			if(2 > this.appendBlock)
-			{
-				// noinspection MagicNumberJS
-				this.appendBlock = 1000;
-			}
-			
-			this._stream.realloc(this._stream._buffer.byteLength + this.appendBlock);
-		}
-		
-		const value = new Uint16Array([number]);
-		const view = new Uint8Array(value.buffer);
-		
-		this._stream._view[this._start] = view[1];
-		this._stream._view[this._start + 1] = view[0];
-		
-		this._length += 4;
-		this.start = (this._start + 2);
-		this.prevLength -= 4;
-	}
-	//**********************************************************************************
-	// noinspection FunctionNamingConventionJS
-	/**
-	 * Append a new number to the current "Stream"
-	 * @param {number} number A new unsigned 24-bit integer to append to current "stream"
-	 */
-	appendUint24(number)
-	{
-		if((this._start + 3) > this._stream._buffer.byteLength)
-		{
-			// noinspection ConstantOnLefSideOfComparisonJS
-			if(3 > this.appendBlock)
-			{
-				// noinspection MagicNumberJS
-				this.appendBlock = 1000;
-			}
-			
-			this._stream.realloc(this._stream._buffer.byteLength + this.appendBlock);
-		}
-		
-		const value = new Uint32Array([number]);
-		const view = new Uint8Array(value.buffer);
-		
-		this._stream._view[this._start] = view[2];
-		this._stream._view[this._start + 1] = view[1];
-		this._stream._view[this._start + 2] = view[0];
-		
-		this._length += 6;
-		this.start = (this._start + 3);
-		this.prevLength -= 6;
-	}
-	//**********************************************************************************
-	// noinspection FunctionNamingConventionJS
-	/**
-	 * Append a new number to the current "Stream"
-	 * @param {number} number A new unsigned 32-bit integer to append to current "stream"
-	 */
-	appendUint32(number)
-	{
-		if((this._start + 4) > this._stream._buffer.byteLength)
-		{
-			// noinspection ConstantOnLefSideOfComparisonJS
-			if(4 > this.appendBlock)
-			{
-				// noinspection MagicNumberJS
-				this.appendBlock = 1000;
-			}
-			
-			this._stream.realloc(this._stream._buffer.byteLength + this.appendBlock);
-		}
-		
-		const value = new Uint32Array([number]);
-		const view = new Uint8Array(value.buffer);
-		
-		this._stream._view[this._start] = view[3];
-		this._stream._view[this._start + 1] = view[2];
-		this._stream._view[this._start + 2] = view[1];
-		this._stream._view[this._start + 3] = view[0];
-		
-		this._length += 8;
-		this.start = (this._start + 4);
-		this.prevLength -= 8;
-	}
-	//**********************************************************************************
-	// noinspection FunctionWithMultipleReturnPointsJS
-	/**
-	 * Get a block of data
-	 * @param {number} size Size of the data block to get
-	 * @param {boolean} [changeLength=true] Should we change "length" and "start" value after reading the data block
-	 * @returns {Array}
-	 */
-	getBlock(size, changeLength = true)
-	{
-		//region Check input parameters
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		if(this._length <= 0)
-			return [];
-		
-		if(this._length < size)
-		{
-			// noinspection AssignmentToFunctionParameterJS
-			size = this._length;
-		}
-		//endregion
-		
-		//region Initial variables
-		let result;
-		//endregion
-		
-		//region Getting result depends on "backward" flag
-		if(this.backward)
-		{
-			const buffer = this._stream._buffer.slice(this._length - size, this._length);
-			const view = new Uint8Array(buffer);
-			
-			result = new Array(size);
-			
-			// noinspection NonBlockStatementBodyJS
-			for(let i = 0; i < size; i++)
-				result[size - 1 - i] = view[i];
-		}
-		else
-		{
-			const buffer = this._stream._buffer.slice(this._start, this._start + size);
-			
-			// noinspection NestedFunctionCallJS
-			result = Array.from(new Uint8Array(buffer));
-		}
-		//endregion
-		
-		//region Change "length" value if needed
-		if(changeLength)
-		{
-			// noinspection ConditionalExpressionJS
-			this.start += ((this.backward) ? ((-1) * size) : size);
-		}
-		//endregion
-		
-		return result;
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS, FunctionNamingConventionJS
-	/**
-	 * Get 2-byte unsigned integer value
-	 * @param {boolean} [changeLength=true] Should we change "length" and "start" value after reading the data block
-	 * @returns {number}
-	 */
-	getUint16(changeLength = true)
-	{
-		const block = this.getBlock(2, changeLength);
-		
-		//region Check posibility for convertion
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		if(block.length < 2)
-			return 0;
-		//endregion
-		
-		//region Convert byte array to "Uint16Array" value
-		const value = new Uint16Array(1);
-		const view = new Uint8Array(value.buffer);
-		
-		view[0] = block[1];
-		view[1] = block[0];
-		//endregion
-		
-		return value[0];
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS, FunctionNamingConventionJS
-	/**
-	 * Get 2-byte signed integer value
-	 * @param {boolean} [changeLength=true] Should we change "length" and "start" value after reading the data block
-	 * @returns {number}
-	 */
-	getInt16(changeLength = true)
-	{
-		const block = this.getBlock(2, changeLength);
-
-		//region Check posibility for convertion
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		if(block.length < 2)
-			return 0;
-		//endregion
-
-		//region Convert byte array to "Int16Array" value
-		const value = new Int16Array(1);
-		const view = new Uint8Array(value.buffer);
-
-		view[0] = block[1];
-		view[1] = block[0];
-		//endregion
-
-		return value[0];
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS, FunctionNamingConventionJS
-	/**
-	 * Get 3-byte unsigned integer value
-	 * @param {boolean} [changeLength=true] Should we change "length" and "start" value after reading the data block
-	 * @returns {number}
-	 */
-	getUint24(changeLength = true)
-	{
-		const block = this.getBlock(3, changeLength);
-		
-		//region Check posibility for convertion
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		if(block.length < 3)
-			return 0;
-		//endregion
-		
-		//region Convert byte array to "Uint32Array" value
-		const value = new Uint32Array(1);
-		const view = new Uint8Array(value.buffer);
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		for(let i = 3; i >= 1; i--)
-			view[3 - i] = block[i - 1];
-		//endregion
-		
-		return value[0];
-	}
-	//**********************************************************************************
-	// noinspection JSUnusedGlobalSymbols, FunctionWithMultipleReturnPointsJS, FunctionNamingConventionJS
-	/**
-	 * Get 4-byte unsigned integer value
-	 * @param {boolean} [changeLength=true] Should we change "length" and "start" value after reading the data block
-	 * @returns {number}
-	 */
-	getUint32(changeLength = true)
-	{
-		const block = this.getBlock(4, changeLength);
-		
-		//region Check posibility for convertion
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		if(block.length < 4)
-			return 0;
-		//endregion
-		
-		//region Convert byte array to "Uint32Array" value
-		const value = new Uint32Array(1);
-		const view = new Uint8Array(value.buffer);
-		
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		for(let i = 3; i >= 0; i--)
-			view[3 - i] = block[i];
-		//endregion
-		
-		return value[0];
-	}
-	//**********************************************************************************
-	/**
-	 * Get 4-byte signed integer value
-	 * @param {boolean} [changeLength=true] Should we change "length" and "start" value after reading the data block
-	 * @returns {number}
-	 */
-	getInt32(changeLength = true)
-	{
-		const block = this.getBlock(4, changeLength);
-
-		//region Check posibility for convertion
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		if(block.length < 4)
-			return 0;
-		//endregion
-
-		//region Convert byte array to "Int32Array" value
-		const value = new Int32Array(1);
-		const view = new Uint8Array(value.buffer);
-
-		// noinspection ConstantOnRightSideOfComparisonJS, ConstantOnLeftSideOfComparisonJS, NonBlockStatementBodyJS
-		for(let i = 3; i >= 0; i--)
-			view[3 - i] = block[i];
-		//endregion
-
-		return value[0];
 	}
 	//**********************************************************************************
 }
@@ -21881,7 +12473,7 @@ class SignedCertificateTimestamp
 			case "signatureAlgorithm":
 				return "";
 			case "signature":
-				return new asn1_7();
+				return new Any();
 			default:
 				throw new Error(`Invalid member name for SignedCertificateTimestamp class: ${memberName}`);
 		}
@@ -21893,7 +12485,7 @@ class SignedCertificateTimestamp
 	 */
 	fromSchema(schema)
 	{
-		if((schema instanceof asn1_5) === false)
+		if((schema instanceof RawData) === false)
 			throw new Error("Object's schema was not verified against input data for SignedCertificateTimestamp");
 		
 		const seqStream = new SeqStream({
@@ -21978,7 +12570,7 @@ class SignedCertificateTimestamp
 			const signatureLength = stream.getUint16();
 			const signatureData = (new Uint8Array(stream.getBlock(signatureLength))).buffer.slice(0);
 			
-			const asn1 = asn1_1(signatureData);
+			const asn1 = fromBER(signatureData);
 			if(asn1.offset === (-1))
 				throw new Error("Object's stream was not correct for SignedCertificateTimestamp");
 			
@@ -21998,7 +12590,7 @@ class SignedCertificateTimestamp
 	{
 		const stream = this.toStream();
 		
-		return new asn1_5({ data: stream.stream.buffer });
+		return new RawData({ data: stream.stream.buffer });
 	}
 	//**********************************************************************************
 	/**
@@ -22136,7 +12728,7 @@ class SignedCertificateTimestamp
 		if(publicKeyBase64 === null)
 			throw new Error(`Public key not found for CT with logId: ${logId}`);
 		
-		const asn1 = asn1_1(stringToArrayBuffer(fromBase64(publicKeyBase64)));
+		const asn1 = fromBER(stringToArrayBuffer(fromBase64(publicKeyBase64)));
 		if(asn1.offset === (-1))
 			throw new Error(`Incorrect key value for CT Log with logId: ${logId}`);
 		
@@ -22262,7 +12854,7 @@ class SignedCertificateTimestampList
 		if(("optional" in names) === false)
 			names.optional = false;
 		
-		return (new asn1_33({
+		return (new OctetString({
 			name: (names.blockName || "SignedCertificateTimestampList"),
 			optional: names.optional
 		}));
@@ -22275,7 +12867,7 @@ class SignedCertificateTimestampList
 	fromSchema(schema)
 	{
 		//region Check the schema is valid
-		if((schema instanceof asn1_33) === false)
+		if((schema instanceof OctetString) === false)
 			throw new Error("Object's schema was not verified against input data for SignedCertificateTimestampList");
 		//endregion
 		
@@ -22325,7 +12917,7 @@ class SignedCertificateTimestampList
 			stream.appendView(timestamp.stream.view);
 		//endregion
 		
-		return new asn1_33({ valueHex: stream.stream.buffer.slice(0) });
+		return new OctetString({ valueHex: stream.stream.buffer.slice(0) });
 	}
 	//**********************************************************************************
 	/**
@@ -22517,15 +13109,15 @@ class CertificateTemplate
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.templateID || "") }),
-				new asn1_31({
+				new ObjectIdentifier({ name: (names.templateID || "") }),
+				new Integer({
 					name: (names.templateMajorVersion || ""),
 					optional: true
 				}),
-				new asn1_31({
+				new Integer({
 					name: (names.templateMinorVersion || ""),
 					optional: true
 				}),
@@ -22548,7 +13140,7 @@ class CertificateTemplate
 		//endregion
 
 		//region Check the schema is valid
-		let asn1 = asn1_2(schema,
+		let asn1 = compareSchema(schema,
 			schema,
 			CertificateTemplate.schema({
 				names: {
@@ -22583,17 +13175,17 @@ class CertificateTemplate
 		//region Create array for output sequence
 		const outputArray = [];
 
-		outputArray.push(new asn1_29({ value: this.templateID }));
+		outputArray.push(new ObjectIdentifier({ value: this.templateID }));
 
 		if("templateMajorVersion" in this)
-			outputArray.push(new asn1_31({ value: this.templateMajorVersion }));
+			outputArray.push(new Integer({ value: this.templateMajorVersion }));
 
 		if("templateMinorVersion" in this)
-			outputArray.push(new asn1_31({ value: this.templateMinorVersion }));
+			outputArray.push(new Integer({ value: this.templateMinorVersion }));
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -22684,7 +13276,7 @@ class CAVersion
 	 */
 	static schema(parameters = {})
 	{
-		return (new asn1_31());
+		return (new Integer());
 	}
 	//**********************************************************************************
 	/**
@@ -22694,7 +13286,7 @@ class CAVersion
 	fromSchema(schema)
 	{
 		//region Check the schema is valid
-		if(schema.constructor.blockName() !== asn1_31.blockName())
+		if(schema.constructor.blockName() !== Integer.blockName())
 			throw new Error("Object's schema was not verified against input data for CAVersion");
 		//endregion
 
@@ -22779,7 +13371,7 @@ class CAVersion
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_31({
+		return (new Integer({
 			valueHex: utilConcatBuf(keyIndexBuffer, certificateIndexBuffer)
 		}));
 		//endregion
@@ -22846,7 +13438,7 @@ class QCStatement
 			case "id":
 				return "";
 			case "type":
-				return new asn1_34();
+				return new Null();
 			default:
 				throw new Error(`Invalid member name for QCStatement class: ${memberName}`);
 		}
@@ -22864,7 +13456,7 @@ class QCStatement
 			case "id":
 				return (memberValue === "");
 			case "type":
-				return (memberValue instanceof asn1_34);
+				return (memberValue instanceof Null);
 			default:
 				throw new Error(`Invalid member name for QCStatement class: ${memberName}`);
 		}
@@ -22894,11 +13486,11 @@ class QCStatement
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.id || "") }),
-				new asn1_7({
+				new ObjectIdentifier({ name: (names.id || "") }),
+				new Any({
 					name: (names.type || ""),
 					optional: true
 				})
@@ -22920,7 +13512,7 @@ class QCStatement
 		//endregion
 
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			QCStatement.schema({
 				names: {
@@ -22949,14 +13541,14 @@ class QCStatement
 	toSchema()
 	{
 		const value = [
-			new asn1_29({ value: this.id })
+			new ObjectIdentifier({ value: this.id })
 		];
 
 		if("type" in this)
 			value.push(this.type);
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value
 		}));
 		//endregion
@@ -23057,10 +13649,10 @@ class QCStatements
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.values || ""),
 					value: QCStatement.schema(names.value || {})
 				}),
@@ -23081,7 +13673,7 @@ class QCStatements
 		//endregion
 
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			QCStatements.schema({
 				names: {
@@ -23106,7 +13698,7 @@ class QCStatements
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: Array.from(this.values, element => element.toSchema())
 		}));
 		//endregion
@@ -23156,7 +13748,7 @@ class Extension
 		 * @desc extnValue
 		 */
 		if("extnValue" in parameters)
-			this.extnValue = new asn1_33({ valueHex: parameters.extnValue });
+			this.extnValue = new OctetString({ valueHex: parameters.extnValue });
 		else
 			this.extnValue = Extension.defaultValues("extnValue");
 
@@ -23187,7 +13779,7 @@ class Extension
 			case "critical":
 				return false;
 			case "extnValue":
-				return new asn1_33();
+				return new OctetString();
 			case "parsedValue":
 				return {};
 			default:
@@ -23221,15 +13813,15 @@ class Extension
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.extnID || "") }),
-				new asn1_37({
+				new ObjectIdentifier({ name: (names.extnID || "") }),
+				new Boolean({
 					name: (names.critical || ""),
 					optional: true
 				}),
-				new asn1_33({ name: (names.extnValue || "") })
+				new OctetString({ name: (names.extnValue || "") })
 			]
 		}));
 	}
@@ -23249,7 +13841,7 @@ class Extension
 		//endregion
 		
 		//region Check the schema is valid
-		let asn1 = asn1_2(schema,
+		let asn1 = compareSchema(schema,
 			schema,
 			Extension.schema({
 				names: {
@@ -23271,7 +13863,7 @@ class Extension
 		this.extnValue = asn1.result.extnValue;
 
 		//region Get "parsedValue" for well-known extensions
-		asn1 = asn1_1(this.extnValue.valueBlock.valueHex);
+		asn1 = fromBER(this.extnValue.valueBlock.valueHex);
 		if(asn1.offset === (-1))
 			return;
 
@@ -23518,16 +14110,16 @@ class Extension
 		//region Create array for output sequence
 		const outputArray = [];
 
-		outputArray.push(new asn1_29({ value: this.extnID }));
+		outputArray.push(new ObjectIdentifier({ value: this.extnID }));
 
 		if(this.critical !== Extension.defaultValues("critical"))
-			outputArray.push(new asn1_37({ value: this.critical }));
+			outputArray.push(new Boolean({ value: this.critical }));
 
 		outputArray.push(this.extnValue);
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -23624,11 +14216,11 @@ class Extensions
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			optional,
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.extensions || ""),
 					value: Extension.schema(names.extension || {})
 				})
@@ -23649,7 +14241,7 @@ class Extensions
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			Extensions.schema({
 				names: {
@@ -23674,7 +14266,7 @@ class Extensions
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: Array.from(this.extensions, element => element.toSchema())
 		}));
 		//endregion
@@ -23731,20 +14323,20 @@ function tbsCertificate(parameters = {})
 	 */
 	const names = getParametersValue(parameters, "names", {});
 	
-	return (new asn1_36({
+	return (new Sequence({
 		name: (names.blockName || "tbsCertificate"),
 		value: [
-			new asn1_39({
+			new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
 				},
 				value: [
-					new asn1_31({ name: (names.tbsCertificateVersion || "tbsCertificate.version") }) // EXPLICIT integer value
+					new Integer({ name: (names.tbsCertificateVersion || "tbsCertificate.version") }) // EXPLICIT integer value
 				]
 			}),
-			new asn1_31({ name: (names.tbsCertificateSerialNumber || "tbsCertificate.serialNumber") }),
+			new Integer({ name: (names.tbsCertificateSerialNumber || "tbsCertificate.serialNumber") }),
 			AlgorithmIdentifier.schema(names.signature || {
 				names: {
 					blockName: "tbsCertificate.signature"
@@ -23755,7 +14347,7 @@ function tbsCertificate(parameters = {})
 					blockName: "tbsCertificate.issuer"
 				}
 			}),
-			new asn1_36({
+			new Sequence({
 				name: (names.tbsCertificateValidity || "tbsCertificate.validity"),
 				value: [
 					Time.schema(names.notBefore || {
@@ -23782,7 +14374,7 @@ function tbsCertificate(parameters = {})
 					blockName: "tbsCertificate.subjectPublicKeyInfo"
 				}
 			}),
-			new asn1_40({
+			new Primitive({
 				name: (names.tbsCertificateIssuerUniqueID || "tbsCertificate.issuerUniqueID"),
 				optional: true,
 				idBlock: {
@@ -23790,7 +14382,7 @@ function tbsCertificate(parameters = {})
 					tagNumber: 1 // [1]
 				}
 			}), // IMPLICIT bistring value
-			new asn1_40({
+			new Primitive({
 				name: (names.tbsCertificateSubjectUniqueID || "tbsCertificate.subjectUniqueID"),
 				optional: true,
 				idBlock: {
@@ -23798,7 +14390,7 @@ function tbsCertificate(parameters = {})
 					tagNumber: 2 // [2]
 				}
 			}), // IMPLICIT bistring value
-			new asn1_39({
+			new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -23926,7 +14518,7 @@ class Certificate
 			case "version":
 				return 0;
 			case "serialNumber":
-				return new asn1_31();
+				return new Integer();
 			case "signature":
 				return new AlgorithmIdentifier();
 			case "issuer":
@@ -23948,7 +14540,7 @@ class Certificate
 			case "signatureAlgorithm":
 				return new AlgorithmIdentifier();
 			case "signatureValue":
-				return new asn1_32();
+				return new BitString();
 			default:
 				throw new Error(`Invalid member name for Certificate class: ${memberName}`);
 		}
@@ -23979,7 +14571,7 @@ class Certificate
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				tbsCertificate(names.tbsCertificate),
@@ -23988,7 +14580,7 @@ class Certificate
 						blockName: "signatureAlgorithm"
 					}
 				}),
-				new asn1_32({ name: (names.signatureValue || "signatureValue") })
+				new BitString({ name: (names.signatureValue || "signatureValue") })
 			]
 		}));
 	}
@@ -24019,7 +14611,7 @@ class Certificate
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			Certificate.schema({
 				names: {
@@ -24074,14 +14666,14 @@ class Certificate
 		
 		if(("version" in this) && (this.version !== Certificate.defaultValues("version")))
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
 				},
 				value: [
-					new asn1_31({ value: this.version }) // EXPLICIT integer value
+					new Integer({ value: this.version }) // EXPLICIT integer value
 				]
 			}));
 		}
@@ -24090,7 +14682,7 @@ class Certificate
 		outputArray.push(this.signature.toSchema());
 		outputArray.push(this.issuer.toSchema());
 		
-		outputArray.push(new asn1_36({
+		outputArray.push(new Sequence({
 			value: [
 				this.notBefore.toSchema(),
 				this.notAfter.toSchema()
@@ -24102,7 +14694,7 @@ class Certificate
 		
 		if("issuerUniqueID" in this)
 		{
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -24113,7 +14705,7 @@ class Certificate
 		}
 		if("subjectUniqueID" in this)
 		{
-			outputArray.push(new asn1_40({
+			outputArray.push(new Primitive({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -24125,13 +14717,13 @@ class Certificate
 		
 		if("extensions" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 3 // [3]
 				},
-				value: [new asn1_36({
+				value: [new Sequence({
 					value: Array.from(this.extensions, element => element.toSchema())
 				})]
 			}));
@@ -24139,7 +14731,7 @@ class Certificate
 		//endregion
 		
 		//region Create and return output sequence
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -24159,7 +14751,7 @@ class Certificate
 			if(this.tbs.length === 0) // No stored certificate TBS part
 				return Certificate.schema().value[0];
 			
-			tbsSchema = asn1_1(this.tbs).result;
+			tbsSchema = fromBER(this.tbs).result;
 		}
 		//endregion
 		//region Create TBS schema via assembling from TBS parts
@@ -24168,7 +14760,7 @@ class Certificate
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				tbsSchema,
 				this.signatureAlgorithm.toSchema(),
@@ -24279,7 +14871,7 @@ class Certificate
 		
 		sequence = sequence.then(result =>
 		{
-			this.signatureValue = new asn1_32({ valueHex: result });
+			this.signatureValue = new BitString({ valueHex: result });
 		});
 		//endregion
 		
@@ -24384,11 +14976,11 @@ class AttCertValidityPeriod
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_14({ name: (names.notBeforeTime || "") }),
-				new asn1_14({ name: (names.notAfterTime || "") })
+				new GeneralizedTime({ name: (names.notBeforeTime || "") }),
+				new GeneralizedTime({ name: (names.notAfterTime || "") })
 			]
 		}));
 	}
@@ -24407,7 +14999,7 @@ class AttCertValidityPeriod
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			AttCertValidityPeriod.schema({
 				names: {
@@ -24434,10 +15026,10 @@ class AttCertValidityPeriod
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_14({ valueDate: this.notBeforeTime }),
-				new asn1_14({ valueDate: this.notAfterTime }),
+				new GeneralizedTime({ valueDate: this.notBeforeTime }),
+				new GeneralizedTime({ valueDate: this.notAfterTime }),
 			]
 		}));
 		//endregion
@@ -24507,9 +15099,9 @@ class IssuerSerial
 			case "issuer":
 				return new GeneralNames();
 			case "serialNumber":
-				return new asn1_31();
+				return new Integer();
 			case "issuerUID":
-				return new asn1_32();
+				return new BitString();
 			default:
 				throw new Error(`Invalid member name for IssuerSerial class: ${memberName}`);
 		}
@@ -24544,12 +15136,12 @@ class IssuerSerial
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				GeneralNames.schema(names.issuer || {}),
-				new asn1_31({ name: (names.serialNumber || "") }),
-				new asn1_32({
+				new Integer({ name: (names.serialNumber || "") }),
+				new BitString({
 					optional: true,
 					name: (names.issuerUID || "")
 				})
@@ -24572,7 +15164,7 @@ class IssuerSerial
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			IssuerSerial.schema({
 				names: {
@@ -24606,7 +15198,7 @@ class IssuerSerial
 	 */
 	toSchema()
 	{
-		const result = new asn1_36({
+		const result = new Sequence({
 			value: [
 				this.issuer.toSchema(),
 				this.serialNumber
@@ -24740,13 +15332,13 @@ class AttributeCertificateInfoV1
 			case "signature":
 				return new AlgorithmIdentifier();
 			case "serialNumber":
-				return new asn1_31();
+				return new Integer();
 			case "attrCertValidityPeriod":
 				return new AttCertValidityPeriod();
 			case "attributes":
 				return [];
 			case "issuerUniqueID":
-				return new asn1_32();
+				return new BitString();
 			case "extensions":
 				return new Extensions();
 			default:
@@ -24787,13 +15379,13 @@ class AttributeCertificateInfoV1
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.version || "") }),
-				new asn1_8({
+				new Integer({ name: (names.version || "") }),
+				new Choice({
 					value: [
-						new asn1_39({
+						new Constructed({
 							name: (names.baseCertificateID || ""),
 							idBlock: {
 								tagClass: 3,
@@ -24801,7 +15393,7 @@ class AttributeCertificateInfoV1
 							},
 							value: IssuerSerial.schema().valueBlock.value
 						}),
-						new asn1_39({
+						new Constructed({
 							name: (names.subjectName || ""),
 							idBlock: {
 								tagClass: 3,
@@ -24817,17 +15409,17 @@ class AttributeCertificateInfoV1
 					}
 				}),
 				AlgorithmIdentifier.schema(names.signature || {}),
-				new asn1_31({ name: (names.serialNumber || "") }),
+				new Integer({ name: (names.serialNumber || "") }),
 				AttCertValidityPeriod.schema(names.attrCertValidityPeriod || {}),
-				new asn1_36({
+				new Sequence({
 					name: (names.attributes || ""),
 					value: [
-						new asn1_6({
+						new Repeated({
 							value: Attribute.schema()
 						})
 					]
 				}),
-				new asn1_32({
+				new BitString({
 					optional: true,
 					name: (names.issuerUniqueID || "")
 				}),
@@ -24858,7 +15450,7 @@ class AttributeCertificateInfoV1
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			AttributeCertificateInfoV1.schema({
 				names: {
@@ -24898,7 +15490,7 @@ class AttributeCertificateInfoV1
 		if("baseCertificateID" in asn1.result)
 		{
 			this.baseCertificateID = new IssuerSerial({
-				schema: new asn1_36({
+				schema: new Sequence({
 					value: asn1.result.baseCertificateID.valueBlock.value
 				})
 			});
@@ -24907,7 +15499,7 @@ class AttributeCertificateInfoV1
 		if("subjectName" in asn1.result)
 		{
 			this.subjectName = new GeneralNames({
-				schema: new asn1_36({
+				schema: new Sequence({
 					value: asn1.result.subjectName.valueBlock.value
 				})
 			});
@@ -24933,13 +15525,13 @@ class AttributeCertificateInfoV1
 	 */
 	toSchema()
 	{
-		const result = new asn1_36({
-			value: [new asn1_31({ value: this.version })]
+		const result = new Sequence({
+			value: [new Integer({ value: this.version })]
 		});
 		
 		if("baseCertificateID" in this)
 		{
-			result.valueBlock.value.push(new asn1_39({
+			result.valueBlock.value.push(new Constructed({
 				idBlock: {
 					tagClass: 3,
 					tagNumber: 0 // [0]
@@ -24950,7 +15542,7 @@ class AttributeCertificateInfoV1
 		
 		if("subjectName" in this)
 		{
-			result.valueBlock.value.push(new asn1_39({
+			result.valueBlock.value.push(new Constructed({
 				idBlock: {
 					tagClass: 3,
 					tagNumber: 1 // [1]
@@ -24963,7 +15555,7 @@ class AttributeCertificateInfoV1
 		result.valueBlock.value.push(this.signature.toSchema());
 		result.valueBlock.value.push(this.serialNumber);
 		result.valueBlock.value.push(this.attrCertValidityPeriod.toSchema());
-		result.valueBlock.value.push(new asn1_36({
+		result.valueBlock.value.push(new Sequence({
 			value: Array.from(this.attributes, element => element.toSchema())
 		}));
 		
@@ -25059,7 +15651,7 @@ class AttributeCertificateV1
 			case "signatureAlgorithm":
 				return new AlgorithmIdentifier();
 			case "signatureValue":
-				return new asn1_32();
+				return new BitString();
 			default:
 				throw new Error(`Invalid member name for AttributeCertificateV1 class: ${memberName}`);
 		}
@@ -25091,12 +15683,12 @@ class AttributeCertificateV1
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				AttributeCertificateInfoV1.schema(names.acinfo || {}),
 				AlgorithmIdentifier.schema(names.signatureAlgorithm || {}),
-				new asn1_32({ name: (names.signatureValue || "") })
+				new BitString({ name: (names.signatureValue || "") })
 			]
 		}));
 	}
@@ -25116,7 +15708,7 @@ class AttributeCertificateV1
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			AttributeCertificateV1.schema({
 				names: {
@@ -25152,7 +15744,7 @@ class AttributeCertificateV1
 	 */
 	toSchema()
 	{
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				this.acinfo.toSchema(),
 				this.signatureAlgorithm.toSchema(),
@@ -25232,13 +15824,13 @@ class ObjectDigestInfo
 		switch(memberName)
 		{
 			case "digestedObjectType":
-				return new asn1_30();
+				return new Enumerated();
 			case "otherObjectTypeID":
-				return new asn1_29();
+				return new ObjectIdentifier();
 			case "digestAlgorithm":
 				return new AlgorithmIdentifier();
 			case "objectDigest":
-				return new asn1_32();
+				return new BitString();
 			default:
 				throw new Error(`Invalid member name for ObjectDigestInfo class: ${memberName}`);
 		}
@@ -25277,16 +15869,16 @@ class ObjectDigestInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_30({ name: (names.digestedObjectType || "") }),
-				new asn1_29({
+				new Enumerated({ name: (names.digestedObjectType || "") }),
+				new ObjectIdentifier({
 					optional: true,
 					name: (names.otherObjectTypeID || "")
 				}),
 				AlgorithmIdentifier.schema(names.digestAlgorithm || {}),
-				new asn1_32({ name: (names.objectDigest || "") }),
+				new BitString({ name: (names.objectDigest || "") }),
 			]
 		}));
 	}
@@ -25307,7 +15899,7 @@ class ObjectDigestInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			ObjectDigestInfo.schema({
 				names: {
@@ -25344,7 +15936,7 @@ class ObjectDigestInfo
 	 */
 	toSchema()
 	{
-		const result = new asn1_36({
+		const result = new Sequence({
 			value: [this.digestedObjectType]
 		});
 		
@@ -25468,7 +16060,7 @@ class V2Form
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				GeneralNames.schema({
@@ -25476,7 +16068,7 @@ class V2Form
 						blockName: names.issuerName
 					}
 				}, true),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					name: (names.baseCertificateID || ""),
 					idBlock: {
@@ -25485,7 +16077,7 @@ class V2Form
 					},
 					value: IssuerSerial.schema().valueBlock.value
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					name: (names.objectDigestInfo || ""),
 					idBlock: {
@@ -25513,7 +16105,7 @@ class V2Form
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			V2Form.schema({
 				names: {
@@ -25535,7 +16127,7 @@ class V2Form
 		if("baseCertificateID" in asn1.result)
 		{
 			this.baseCertificateID = new IssuerSerial({
-				schema: new asn1_36({
+				schema: new Sequence({
 					value: asn1.result.baseCertificateID.valueBlock.value
 				})
 			});
@@ -25544,7 +16136,7 @@ class V2Form
 		if("objectDigestInfo" in asn1.result)
 		{
 			this.objectDigestInfo = new ObjectDigestInfo({
-				schema: new asn1_36({
+				schema: new Sequence({
 					value: asn1.result.objectDigestInfo.valueBlock.value
 				})
 			});
@@ -25558,14 +16150,14 @@ class V2Form
 	 */
 	toSchema()
 	{
-		const result = new asn1_36();
+		const result = new Sequence();
 		
 		if("issuerName" in this)
 			result.valueBlock.value.push(this.issuerName.toSchema());
 		
 		if("baseCertificateID" in this)
 		{
-			result.valueBlock.value.push(new asn1_39({
+			result.valueBlock.value.push(new Constructed({
 				idBlock: {
 					tagClass: 3,
 					tagNumber: 0 // [0]
@@ -25576,7 +16168,7 @@ class V2Form
 		
 		if("objectDigestInfo" in this)
 		{
-			result.valueBlock.value.push(new asn1_39({
+			result.valueBlock.value.push(new Constructed({
 				idBlock: {
 					tagClass: 3,
 					tagNumber: 1 // [1]
@@ -25704,10 +16296,10 @@ class Holder
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					name: (names.baseCertificateID || ""),
 					idBlock: {
@@ -25716,7 +16308,7 @@ class Holder
 					},
 					value: IssuerSerial.schema().valueBlock.value
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					name: (names.entityName || ""),
 					idBlock: {
@@ -25725,7 +16317,7 @@ class Holder
 					},
 					value: GeneralNames.schema().valueBlock.value
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					name: (names.objectDigestInfo || ""),
 					idBlock: {
@@ -25753,7 +16345,7 @@ class Holder
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			Holder.schema({
 				names: {
@@ -25772,7 +16364,7 @@ class Holder
 		if("baseCertificateID" in asn1.result)
 		{
 			this.baseCertificateID = new IssuerSerial({
-				schema: new asn1_36({
+				schema: new Sequence({
 					value: asn1.result.baseCertificateID.valueBlock.value
 				})
 			});
@@ -25781,7 +16373,7 @@ class Holder
 		if("entityName" in asn1.result)
 		{
 			this.entityName = new GeneralNames({
-				schema: new asn1_36({
+				schema: new Sequence({
 					value: asn1.result.entityName.valueBlock.value
 				})
 			});
@@ -25790,7 +16382,7 @@ class Holder
 		if("objectDigestInfo" in asn1.result)
 		{
 			this.objectDigestInfo = new ObjectDigestInfo({
-				schema: new asn1_36({
+				schema: new Sequence({
 					value: asn1.result.objectDigestInfo.valueBlock.value
 				})
 			});
@@ -25804,11 +16396,11 @@ class Holder
 	 */
 	toSchema()
 	{
-		const result = new asn1_36();
+		const result = new Sequence();
 		
 		if("baseCertificateID" in this)
 		{
-			result.valueBlock.value.push(new asn1_39({
+			result.valueBlock.value.push(new Constructed({
 				idBlock: {
 					tagClass: 3,
 					tagNumber: 0 // [0]
@@ -25819,7 +16411,7 @@ class Holder
 		
 		if("entityName" in this)
 		{
-			result.valueBlock.value.push(new asn1_39({
+			result.valueBlock.value.push(new Constructed({
 				idBlock: {
 					tagClass: 3,
 					tagNumber: 1 // [1]
@@ -25830,7 +16422,7 @@ class Holder
 		
 		if("objectDigestInfo" in this)
 		{
-			result.valueBlock.value.push(new asn1_39({
+			result.valueBlock.value.push(new Constructed({
 				idBlock: {
 					tagClass: 3,
 					tagNumber: 2 // [2]
@@ -25952,13 +16544,13 @@ class AttributeCertificateInfoV2
 			case "signature":
 				return new AlgorithmIdentifier();
 			case "serialNumber":
-				return new asn1_31();
+				return new Integer();
 			case "attrCertValidityPeriod":
 				return new AttCertValidityPeriod();
 			case "attributes":
 				return [];
 			case "issuerUniqueID":
-				return new asn1_32();
+				return new BitString();
 			case "extensions":
 				return new Extensions();
 			default:
@@ -25997,19 +16589,19 @@ class AttributeCertificateInfoV2
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.version || "") }),
+				new Integer({ name: (names.version || "") }),
 				Holder.schema(names.holder || {}),
-				new asn1_8({
+				new Choice({
 					value: [
 						GeneralNames.schema({
 							names: {
 								blockName: (names.issuer || "")
 							}
 						}),
-						new asn1_39({
+						new Constructed({
 							name: (names.issuer || ""),
 							idBlock: {
 								tagClass: 3, // CONTEXT-SPECIFIC
@@ -26020,17 +16612,17 @@ class AttributeCertificateInfoV2
 					]
 				}),
 				AlgorithmIdentifier.schema(names.signature || {}),
-				new asn1_31({ name: (names.serialNumber || "") }),
+				new Integer({ name: (names.serialNumber || "") }),
 				AttCertValidityPeriod.schema(names.attrCertValidityPeriod || {}),
-				new asn1_36({
+				new Sequence({
 					name: (names.attributes || ""),
 					value: [
-						new asn1_6({
+						new Repeated({
 							value: Attribute.schema()
 						})
 					]
 				}),
-				new asn1_32({
+				new BitString({
 					optional: true,
 					name: (names.issuerUniqueID || "")
 				}),
@@ -26060,7 +16652,7 @@ class AttributeCertificateInfoV2
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			AttributeCertificateInfoV2.schema({
 				names: {
@@ -26105,7 +16697,7 @@ class AttributeCertificateInfoV2
 		{
 			case 3: // V2Form
 				this.issuer = new V2Form({
-					schema: new asn1_36({
+					schema: new Sequence({
 						value: asn1.result.issuer.valueBlock.value
 					})
 				});
@@ -26134,11 +16726,11 @@ class AttributeCertificateInfoV2
 	 */
 	toSchema()
 	{
-		const result = new asn1_36({
+		const result = new Sequence({
 			value: [
-				new asn1_31({ value: this.version }),
+				new Integer({ value: this.version }),
 				this.holder.toSchema(),
-				new asn1_39({
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
@@ -26148,7 +16740,7 @@ class AttributeCertificateInfoV2
 				this.signature.toSchema(),
 				this.serialNumber,
 				this.attrCertValidityPeriod.toSchema(),
-				new asn1_36({
+				new Sequence({
 					value: Array.from(this.attributes, element => element.toSchema())
 				})
 			]
@@ -26240,7 +16832,7 @@ class AttributeCertificateV2
 			case "signatureAlgorithm":
 				return new AlgorithmIdentifier();
 			case "signatureValue":
-				return new asn1_32();
+				return new BitString();
 			default:
 				throw new Error(`Invalid member name for AttributeCertificateV2 class: ${memberName}`);
 		}
@@ -26272,12 +16864,12 @@ class AttributeCertificateV2
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				AttributeCertificateInfoV2.schema(names.acinfo || {}),
 				AlgorithmIdentifier.schema(names.signatureAlgorithm || {}),
-				new asn1_32({ name: (names.signatureValue || "") })
+				new BitString({ name: (names.signatureValue || "") })
 			]
 		}));
 	}
@@ -26297,7 +16889,7 @@ class AttributeCertificateV2
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			AttributeCertificateV2.schema({
 				names: {
@@ -26333,7 +16925,7 @@ class AttributeCertificateV2
 	 */
 	toSchema()
 	{
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				this.acinfo.toSchema(),
 				this.signatureAlgorithm.toSchema(),
@@ -26409,7 +17001,7 @@ class CertBag
 			case "certId":
 				return "";
 			case "certValue":
-				return (new asn1_7());
+				return (new Any());
 			case "parsedValue":
 				return {};
 			default:
@@ -26429,7 +17021,7 @@ class CertBag
 			case "certId":
 				return (memberValue === "");
 			case "certValue":
-				return (memberValue instanceof asn1_7);
+				return (memberValue instanceof Any);
 			case "parsedValue":
 				return ((memberValue instanceof Object) && (Object.keys(memberValue).length === 0));
 			default:
@@ -26461,16 +17053,16 @@ class CertBag
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.id || "id") }),
-				new asn1_39({
+				new ObjectIdentifier({ name: (names.id || "id") }),
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
-					value: [new asn1_7({ name: (names.value || "value") })] // EXPLICIT ANY value
+					value: [new Any({ name: (names.value || "value") })] // EXPLICIT ANY value
 				})
 			]
 		}));
@@ -26490,7 +17082,7 @@ class CertBag
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			CertBag.schema({
 				names: {
@@ -26512,7 +17104,7 @@ class CertBag
 		{
 			case "1.2.840.113549.1.9.22.1": // x509Certificate
 				{
-					const asn1Inner = asn1_1(this.certValue.valueBlock.valueHex);
+					const asn1Inner = fromBER(this.certValue.valueBlock.valueHex);
 					
 					try
 					{
@@ -26526,7 +17118,7 @@ class CertBag
 				break;
 			case "1.2.840.113549.1.9.22.3": // attributeCertificate - (!!!) THIS OID IS SUBJECT FOR CHANGE IN FUTURE (!!!)
 				{
-					const asn1Inner = asn1_1(this.certValue.valueBlock.valueHex);
+					const asn1Inner = fromBER(this.certValue.valueBlock.valueHex);
 					this.parsedValue = new AttributeCertificateV2({ schema: asn1Inner.result });
 				}
 				break;
@@ -26551,13 +17143,13 @@ class CertBag
 			else // x509Certificate
 				this.certId = "1.2.840.113549.1.9.22.1";
 
-			this.certValue = new asn1_33({ valueHex: this.parsedValue.toSchema().toBER(false) });
+			this.certValue = new OctetString({ valueHex: this.parsedValue.toSchema().toBER(false) });
 		}
 		
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_29({ value: this.certId }),
-				new asn1_39({
+				new ObjectIdentifier({ value: this.certId }),
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
@@ -26633,7 +17225,7 @@ class RevokedCertificate
 		switch(memberName)
 		{
 			case "userCertificate":
-				return new asn1_31();
+				return new Integer();
 			case "revocationDate":
 				return new Time();
 			case "crlEntryExtensions":
@@ -26670,10 +17262,10 @@ class RevokedCertificate
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return new asn1_36({
+		return new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.userCertificate || "userCertificate") }),
+				new Integer({ name: (names.userCertificate || "userCertificate") }),
 				Time.schema({
 					names: {
 						utcTimeName: (names.revocationDate || "revocationDate"),
@@ -26704,7 +17296,7 @@ class RevokedCertificate
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			RevokedCertificate.schema()
 		);
@@ -26739,7 +17331,7 @@ class RevokedCertificate
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -26798,10 +17390,10 @@ function tbsCertList(parameters = {})
 	 */
 	const names = getParametersValue(parameters, "names", {});
 	
-	return (new asn1_36({
+	return (new Sequence({
 		name: (names.blockName || "tbsCertList"),
 		value: [
-			new asn1_31({
+			new Integer({
 				optional: true,
 				name: (names.tbsCertListVersion || "tbsCertList.version"),
 				value: 2
@@ -26828,14 +17420,14 @@ function tbsCertList(parameters = {})
 					generalTimeName: "tbsCertList.nextUpdate"
 				}
 			}, true),
-			new asn1_36({
+			new Sequence({
 				optional: true,
 				value: [
-					new asn1_6({
+					new Repeated({
 						name: (names.tbsCertListRevokedCertificates || "tbsCertList.revokedCertificates"),
-						value: new asn1_36({
+						value: new Sequence({
 							value: [
-								new asn1_31(),
+								new Integer(),
 								Time.schema(),
 								Extensions.schema({}, true)
 							]
@@ -26843,7 +17435,7 @@ function tbsCertList(parameters = {})
 					})
 				]
 			}),
-			new asn1_39({
+			new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -26964,7 +17556,7 @@ class CertificateRevocationList {
 			case "signatureAlgorithm":
 				return new AlgorithmIdentifier();
 			case "signatureValue":
-				return new asn1_32();
+				return new BitString();
 			default:
 				throw new Error(`Invalid member name for CertificateRevocationList class: ${memberName}`);
 		}
@@ -26994,7 +17586,7 @@ class CertificateRevocationList {
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || "CertificateList"),
 			value: [
 				tbsCertList(parameters),
@@ -27003,7 +17595,7 @@ class CertificateRevocationList {
 						blockName: "signatureAlgorithm"
 					}
 				}),
-				new asn1_32({ name: (names.signatureValue || "signatureValue") })
+				new BitString({ name: (names.signatureValue || "signatureValue") })
 			]
 		}));
 	}
@@ -27030,7 +17622,7 @@ class CertificateRevocationList {
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			CertificateRevocationList.schema()
 		);
@@ -27066,7 +17658,7 @@ class CertificateRevocationList {
 		const outputArray = [];
 		
 		if(this.version !== CertificateRevocationList.defaultValues("version"))
-			outputArray.push(new asn1_31({ value: this.version }));
+			outputArray.push(new Integer({ value: this.version }));
 		
 		outputArray.push(this.signature.toSchema());
 		outputArray.push(this.issuer.toSchema());
@@ -27077,14 +17669,14 @@ class CertificateRevocationList {
 		
 		if("revokedCertificates" in this)
 		{
-			outputArray.push(new asn1_36({
+			outputArray.push(new Sequence({
 				value: Array.from(this.revokedCertificates, element => element.toSchema())
 			}));
 		}
 		
 		if("crlExtensions" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -27097,7 +17689,7 @@ class CertificateRevocationList {
 		}
 		//endregion
 		
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 	}
@@ -27116,7 +17708,7 @@ class CertificateRevocationList {
 			if(this.tbs.length === 0) // No stored TBS part
 				return CertificateRevocationList.schema();
 			
-			tbsSchema = asn1_1(this.tbs).result;
+			tbsSchema = fromBER(this.tbs).result;
 		}
 		//endregion
 		//region Create TBS schema via assembling from TBS parts
@@ -27125,7 +17717,7 @@ class CertificateRevocationList {
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				tbsSchema,
 				this.signatureAlgorithm.toSchema(),
@@ -27232,7 +17824,7 @@ class CertificateRevocationList {
 		
 		sequence = sequence.then(result =>
 		{
-			this.signatureValue = new asn1_32({ valueHex: result });
+			this.signatureValue = new BitString({ valueHex: result });
 		});
 		//endregion
 		
@@ -27347,7 +17939,7 @@ class CRLBag
 			case "crlId":
 				return "";
 			case "crlValue":
-				return (new asn1_7());
+				return (new Any());
 			case "parsedValue":
 				return {};
 			default:
@@ -27367,7 +17959,7 @@ class CRLBag
 			case "crlId":
 				return (memberValue === "");
 			case "crlValue":
-				return (memberValue instanceof asn1_7);
+				return (memberValue instanceof Any);
 			case "parsedValue":
 				return ((memberValue instanceof Object) && (Object.keys(memberValue).length === 0));
 			default:
@@ -27399,16 +17991,16 @@ class CRLBag
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.id || "id") }),
-				new asn1_39({
+				new ObjectIdentifier({ name: (names.id || "id") }),
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
-					value: [new asn1_7({ name: (names.value || "value") })] // EXPLICIT ANY value
+					value: [new Any({ name: (names.value || "value") })] // EXPLICIT ANY value
 				})
 			]
 		}));
@@ -27428,7 +18020,7 @@ class CRLBag
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			CRLBag.schema({
 				names: {
@@ -27450,7 +18042,7 @@ class CRLBag
 		{
 			case "1.2.840.113549.1.9.23.1": // x509CRL
 				{
-					const asn1Inner = asn1_1(this.certValue.valueBlock.valueHex);
+					const asn1Inner = fromBER(this.certValue.valueBlock.valueHex);
 					this.parsedValue = new CertificateRevocationList({ schema: asn1Inner.result });
 				}
 				break;
@@ -27470,13 +18062,13 @@ class CRLBag
 		if("parsedValue" in this)
 		{
 			this.certId = "1.2.840.113549.1.9.23.1";
-			this.certValue = new asn1_33({ valueHex: this.parsedValue.toSchema().toBER(false) });
+			this.certValue = new OctetString({ valueHex: this.parsedValue.toSchema().toBER(false) });
 		}
 		
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_29({ value: this.crlId }),
-				new asn1_39({
+				new ObjectIdentifier({ value: this.crlId }),
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
@@ -27547,7 +18139,7 @@ class SecretBag
 			case "secretTypeId":
 				return "";
 			case "secretValue":
-				return (new asn1_7());
+				return (new Any());
 			default:
 				throw new Error(`Invalid member name for SecretBag class: ${memberName}`);
 		}
@@ -27565,7 +18157,7 @@ class SecretBag
 			case "secretTypeId":
 				return (memberValue === "");
 			case "secretValue":
-				return (memberValue instanceof asn1_7);
+				return (memberValue instanceof Any);
 			default:
 				throw new Error(`Invalid member name for SecretBag class: ${memberName}`);
 		}
@@ -27595,16 +18187,16 @@ class SecretBag
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.id || "id") }),
-				new asn1_39({
+				new ObjectIdentifier({ name: (names.id || "id") }),
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
-					value: [new asn1_7({ name: (names.value || "value") })] // EXPLICIT ANY value
+					value: [new Any({ name: (names.value || "value") })] // EXPLICIT ANY value
 				})
 			]
 		}));
@@ -27624,7 +18216,7 @@ class SecretBag
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			SecretBag.schema({
 				names: {
@@ -27651,10 +18243,10 @@ class SecretBag
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_29({ value: this.secretTypeId }),
-				new asn1_39({
+				new ObjectIdentifier({ value: this.secretTypeId }),
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
@@ -27732,7 +18324,7 @@ class SafeBag
 			case "bagId":
 				return "";
 			case "bagValue":
-				return (new asn1_7());
+				return (new Any());
 			case "bagAttributes":
 				return [];
 			default:
@@ -27752,7 +18344,7 @@ class SafeBag
 			case "bagId":
 				return (memberValue === "");
 			case "bagValue":
-				return (memberValue instanceof asn1_7);
+				return (memberValue instanceof Any);
 			case "bagAttributes":
 				return (memberValue.length === 0);
 			default:
@@ -27786,21 +18378,21 @@ class SafeBag
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.bagId || "bagId") }),
-				new asn1_39({
+				new ObjectIdentifier({ name: (names.bagId || "bagId") }),
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
-					value: [new asn1_7({ name: (names.bagValue || "bagValue") })] // EXPLICIT ANY value
+					value: [new Any({ name: (names.bagValue || "bagValue") })] // EXPLICIT ANY value
 				}),
-				new asn1_35({
+				new Set({
 					optional: true,
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.bagAttributes || "bagAttributes"),
 							value: Attribute.schema()
 						})
@@ -27825,7 +18417,7 @@ class SafeBag
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			SafeBag.schema({
 				names: {
@@ -27880,8 +18472,8 @@ class SafeBag
 	{
 		//region Construct and return new ASN.1 schema for this object
 		const outputArray = [
-			new asn1_29({ value: this.bagId }),
-			new asn1_39({
+			new ObjectIdentifier({ value: this.bagId }),
+			new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -27892,12 +18484,12 @@ class SafeBag
 		
 		if("bagAttributes" in this)
 		{
-			outputArray.push(new asn1_35({
+			outputArray.push(new Set({
 				value: Array.from(this.bagAttributes, element => element.toSchema())
 			}));
 		}
 		
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -28002,10 +18594,10 @@ class SafeContents
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.safeBags || ""),
 					value: SafeBag.schema()
 				})
@@ -28026,7 +18618,7 @@ class SafeContents
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			SafeContents.schema({
 				names: {
@@ -28051,7 +18643,7 @@ class SafeContents
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: Array.from(this.safeBags, element => element.toSchema())
 		}));
 		//endregion
@@ -28115,7 +18707,7 @@ class OtherCertificateFormat
 			case "otherCertFormat":
 				return "";
 			case "otherCert":
-				return new asn1_7();
+				return new Any();
 			default:
 				throw new Error(`Invalid member name for OtherCertificateFormat class: ${memberName}`);
 		}
@@ -28144,11 +18736,11 @@ class OtherCertificateFormat
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.otherCertFormat || "otherCertFormat") }),
-				new asn1_7({ name: (names.otherCert || "otherCert") })
+				new ObjectIdentifier({ name: (names.otherCertFormat || "otherCertFormat") }),
+				new Any({ name: (names.otherCert || "otherCert") })
 			]
 		}));
 	}
@@ -28167,7 +18759,7 @@ class OtherCertificateFormat
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			OtherCertificateFormat.schema()
 		);
@@ -28189,9 +18781,9 @@ class OtherCertificateFormat
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_29({ value: this.otherCertFormat }),
+				new ObjectIdentifier({ value: this.otherCertFormat }),
 				this.otherCert
 			]
 		}));
@@ -28208,7 +18800,7 @@ class OtherCertificateFormat
 			otherCertFormat: this.otherCertFormat
 		};
 
-		if(!(this.otherCert instanceof asn1_7))
+		if(!(this.otherCert instanceof Any))
 			object.otherCert = this.otherCert.toJSON();
 
 		return object;
@@ -28287,38 +18879,38 @@ class CertificateSet
 		const names = getParametersValue(parameters, "names", {});
 		
 		return (
-			new asn1_35({
+			new Set({
 				name: (names.blockName || ""),
 				value: [
-					new asn1_6({
+					new Repeated({
 						name: (names.certificates || "certificates"),
-						value: new asn1_8({
+						value: new Choice({
 							value: [
 								Certificate.schema(),
-								new asn1_39({
+								new Constructed({
 									idBlock: {
 										tagClass: 3, // CONTEXT-SPECIFIC
 										tagNumber: 0 // [0]
 									},
 									value: [
-										new asn1_7()
+										new Any()
 									]
 								}), // JUST A STUB
-								new asn1_39({
+								new Constructed({
 									idBlock: {
 										tagClass: 3, // CONTEXT-SPECIFIC
 										tagNumber: 1 // [1]
 									},
 									value: AttributeCertificateV1.schema().valueBlock.value
 								}),
-								new asn1_39({
+								new Constructed({
 									idBlock: {
 										tagClass: 3, // CONTEXT-SPECIFIC
 										tagNumber: 2 // [2]
 									},
 									value: AttributeCertificateV2.schema().valueBlock.value
 								}),
-								new asn1_39({
+								new Constructed({
 									idBlock: {
 										tagClass: 3, // CONTEXT-SPECIFIC
 										tagNumber: 3 // [3]
@@ -28346,7 +18938,7 @@ class CertificateSet
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			CertificateSet.schema()
 		);
@@ -28364,7 +18956,7 @@ class CertificateSet
 				return new Certificate({ schema: element });
 			
 			//region Making "Sequence" from "Constructed" value
-			const elementSequence = new asn1_36({
+			const elementSequence = new Sequence({
 				value: element.valueBlock.value
 			});
 			//endregion
@@ -28391,7 +18983,7 @@ class CertificateSet
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_35({
+		return (new Set({
 			value: Array.from(this.certificates, element =>
 			{
 				switch(true)
@@ -28399,7 +18991,7 @@ class CertificateSet
 					case (element instanceof Certificate):
 						return element.toSchema();
 					case (element instanceof AttributeCertificateV1):
-						return new asn1_39({
+						return new Constructed({
 							idBlock: {
 								tagClass: 3,
 								tagNumber: 1 // [1]
@@ -28407,7 +18999,7 @@ class CertificateSet
 							value: element.toSchema().valueBlock.value
 						});
 					case (element instanceof AttributeCertificateV2):
-						return new asn1_39({
+						return new Constructed({
 							idBlock: {
 								tagClass: 3,
 								tagNumber: 2 // [2]
@@ -28415,7 +19007,7 @@ class CertificateSet
 							value: element.toSchema().valueBlock.value
 						});
 					case (element instanceof OtherCertificateFormat):
-						return new asn1_39({
+						return new Constructed({
 							idBlock: {
 								tagClass: 3,
 								tagNumber: 3 // [3]
@@ -28488,7 +19080,7 @@ class OtherRevocationInfoFormat
 			case "otherRevInfoFormat":
 				return "";
 			case "otherRevInfo":
-				return new asn1_7();
+				return new Any();
 			default:
 				throw new Error(`Invalid member name for OtherRevocationInfoFormat class: ${memberName}`);
 		}
@@ -28517,11 +19109,11 @@ class OtherRevocationInfoFormat
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.otherRevInfoFormat || "otherRevInfoFormat") }),
-				new asn1_7({ name: (names.otherRevInfo || "otherRevInfo") })
+				new ObjectIdentifier({ name: (names.otherRevInfoFormat || "otherRevInfoFormat") }),
+				new Any({ name: (names.otherRevInfo || "otherRevInfo") })
 			]
 		}));
 	}
@@ -28540,7 +19132,7 @@ class OtherRevocationInfoFormat
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			OtherRevocationInfoFormat.schema()
 		);
@@ -28562,9 +19154,9 @@ class OtherRevocationInfoFormat
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_29({ value: this.otherRevInfoFormat }),
+				new ObjectIdentifier({ value: this.otherRevInfoFormat }),
 				this.otherRevInfo
 			]
 		}));
@@ -28581,7 +19173,7 @@ class OtherRevocationInfoFormat
 			otherRevInfoFormat: this.otherRevInfoFormat
 		};
 
-		if(!(this.otherRevInfo instanceof asn1_7))
+		if(!(this.otherRevInfo instanceof Any))
 			object.otherRevInfo = this.otherRevInfo.toJSON();
 
 		return object;
@@ -28664,22 +19256,22 @@ class RevocationInfoChoices
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_35({
+		return (new Set({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.crls || ""),
-					value: new asn1_8({
+					value: new Choice({
 						value: [
 							CertificateRevocationList.schema(),
-							new asn1_39({
+							new Constructed({
 								idBlock: {
 									tagClass: 3, // CONTEXT-SPECIFIC
 									tagNumber: 1 // [1]
 								},
 								value: [
-									new asn1_29(),
-									new asn1_7()
+									new ObjectIdentifier(),
+									new Any()
 								]
 							})
 						]
@@ -28702,7 +19294,7 @@ class RevocationInfoChoices
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			RevocationInfoChoices.schema({
 				names: {
@@ -28750,7 +19342,7 @@ class RevocationInfoChoices
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_35({
+		return (new Set({
 			value: outputArray
 		}));
 		//endregion
@@ -28865,10 +19457,10 @@ class OriginatorInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_39({
+				new Constructed({
 					name: (names.certs || ""),
 					optional: true,
 					idBlock: {
@@ -28877,7 +19469,7 @@ class OriginatorInfo
 					},
 					value: CertificateSet.schema().valueBlock.value
 				}),
-				new asn1_39({
+				new Constructed({
 					name: (names.crls || ""),
 					optional: true,
 					idBlock: {
@@ -28904,7 +19496,7 @@ class OriginatorInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			OriginatorInfo.schema({
 				names: {
@@ -28922,7 +19514,7 @@ class OriginatorInfo
 		if("certs" in asn1.result)
 		{
 			this.certs = new CertificateSet({
-				schema: new asn1_35({
+				schema: new Set({
 					value: asn1.result.certs.valueBlock.value
 				})
 			});
@@ -28931,7 +19523,7 @@ class OriginatorInfo
 		if("crls" in asn1.result)
 		{
 			this.crls = new RevocationInfoChoices({
-				schema: new asn1_35({
+				schema: new Set({
 					value: asn1.result.crls.valueBlock.value
 				})
 			});
@@ -28949,7 +19541,7 @@ class OriginatorInfo
 
 		if("certs" in this)
 		{
-			sequenceValue.push(new asn1_39({
+			sequenceValue.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -28960,7 +19552,7 @@ class OriginatorInfo
 
 		if("crls" in this)
 		{
-			sequenceValue.push(new asn1_39({
+			sequenceValue.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 1 // [1]
@@ -28970,7 +19562,7 @@ class OriginatorInfo
 		}
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: sequenceValue
 		}));
 		//endregion
@@ -29040,7 +19632,7 @@ class IssuerAndSerialNumber
 			case "issuer":
 				return new RelativeDistinguishedNames();
 			case "serialNumber":
-				return new asn1_31();
+				return new Integer();
 			default:
 				throw new Error(`Invalid member name for IssuerAndSerialNumber class: ${memberName}`);
 		}
@@ -29071,11 +19663,11 @@ class IssuerAndSerialNumber
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				RelativeDistinguishedNames.schema(names.issuer || {}),
-				new asn1_31({ name: (names.serialNumber || "") })
+				new Integer({ name: (names.serialNumber || "") })
 			]
 		}));
 	}
@@ -29094,7 +19686,7 @@ class IssuerAndSerialNumber
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			IssuerAndSerialNumber.schema({
 				names: {
@@ -29125,7 +19717,7 @@ class IssuerAndSerialNumber
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				this.issuer.toSchema(),
 				this.serialNumber
@@ -29242,20 +19834,20 @@ class RecipientIdentifier
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_8({
+		return (new Choice({
 			value: [
 				IssuerAndSerialNumber.schema({
 					names: {
 						blockName: (names.blockName || "")
 					}
 				}),
-				new asn1_39({
+				new Constructed({
 					name: (names.blockName || ""),
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
-					value: [new asn1_33()]
+					value: [new OctetString()]
 				})
 			]
 		}));
@@ -29274,7 +19866,7 @@ class RecipientIdentifier
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			RecipientIdentifier.schema({
 				names: {
@@ -29313,7 +19905,7 @@ class RecipientIdentifier
 			case 1:
 				return this.value.toSchema();
 			case 2:
-				return new asn1_39({
+				return new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
@@ -29321,7 +19913,7 @@ class RecipientIdentifier
 					value: [this.value]
 				});
 			default:
-				return new asn1_7();
+				return new Any();
 		}
 		//endregion
 	}
@@ -29408,7 +20000,7 @@ class KeyTransRecipientInfo
 			case "keyEncryptionAlgorithm":
 				return new AlgorithmIdentifier();
 			case "encryptedKey":
-				return new asn1_33();
+				return new OctetString();
 			case "recipientCertificate":
 				return new Certificate();
 			default:
@@ -29466,13 +20058,13 @@ class KeyTransRecipientInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.version || "") }),
+				new Integer({ name: (names.version || "") }),
 				RecipientIdentifier.schema(names.rid || {}),
 				AlgorithmIdentifier.schema(names.keyEncryptionAlgorithm || {}),
-				new asn1_33({ name: (names.encryptedKey || "") })
+				new OctetString({ name: (names.encryptedKey || "") })
 			]
 		}));
 	}
@@ -29493,7 +20085,7 @@ class KeyTransRecipientInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			KeyTransRecipientInfo.schema({
 				names: {
@@ -29543,15 +20135,15 @@ class KeyTransRecipientInfo
 		{
 			this.version = 0;
 			
-			outputArray.push(new asn1_31({ value: this.version }));
+			outputArray.push(new Integer({ value: this.version }));
 			outputArray.push(this.rid.toSchema());
 		}
 		else
 		{
 			this.version = 2;
 			
-			outputArray.push(new asn1_31({ value: this.version }));
-			outputArray.push(new asn1_39({
+			outputArray.push(new Integer({ value: this.version }));
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -29565,7 +20157,7 @@ class KeyTransRecipientInfo
 		//endregion 
 		
 		//region Construct and return new ASN.1 schema for this object 
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion 
@@ -29632,7 +20224,7 @@ class OriginatorPublicKey
 			case "algorithm":
 				return new AlgorithmIdentifier();
 			case "publicKey":
-				return new asn1_32();
+				return new BitString();
 			default:
 				throw new Error(`Invalid member name for OriginatorPublicKey class: ${memberName}`);
 		}
@@ -29678,11 +20270,11 @@ class OriginatorPublicKey
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				AlgorithmIdentifier.schema(names.algorithm || {}),
-				new asn1_32({ name: (names.publicKey || "") })
+				new BitString({ name: (names.publicKey || "") })
 			]
 		}));
 	}
@@ -29701,7 +20293,7 @@ class OriginatorPublicKey
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			OriginatorPublicKey.schema({
 				names: {
@@ -29732,7 +20324,7 @@ class OriginatorPublicKey
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				this.algorithm.toSchema(),
 				this.publicKey
@@ -29848,21 +20440,21 @@ class OriginatorIdentifierOrKey
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_8({
+		return (new Choice({
 			value: [
 				IssuerAndSerialNumber.schema({
 					names: {
 						blockName: (names.blockName || "")
 					}
 				}),
-				new asn1_40({
+				new Primitive({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
 					name: (names.blockName || "")
 				}),
-				new asn1_39({
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
@@ -29887,7 +20479,7 @@ class OriginatorIdentifierOrKey
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			OriginatorIdentifierOrKey.schema({
 				names: {
@@ -29922,7 +20514,7 @@ class OriginatorIdentifierOrKey
 			{
 				this.variant = 3;
 				this.value = new OriginatorPublicKey({
-					schema: new asn1_36({
+					schema: new Sequence({
 						value: asn1.result.blockName.valueBlock.value
 					})
 				});
@@ -29957,7 +20549,7 @@ class OriginatorIdentifierOrKey
 					return _schema;
 				}
 			default:
-				return new asn1_7();
+				return new Any();
 		}
 		//endregion
 	}
@@ -30075,12 +20667,12 @@ class OtherKeyAttribute
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			optional: (names.optional || true),
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.keyAttrId || "") }),
-				new asn1_7({
+				new ObjectIdentifier({ name: (names.keyAttrId || "") }),
+				new Any({
 					optional: true,
 					name: (names.keyAttr || "")
 				})
@@ -30102,7 +20694,7 @@ class OtherKeyAttribute
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			OtherKeyAttribute.schema({
 				names: {
@@ -30133,14 +20725,14 @@ class OtherKeyAttribute
 		//region Create array for output sequence
 		const outputArray = [];
 
-		outputArray.push(new asn1_29({ value: this.keyAttrId }));
+		outputArray.push(new ObjectIdentifier({ value: this.keyAttrId }));
 
 		if("keyAttr" in this)
 			outputArray.push(this.keyAttr);
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -30216,9 +20808,9 @@ class RecipientKeyIdentifier
 		switch(memberName)
 		{
 			case "subjectKeyIdentifier":
-				return new asn1_33();
+				return new OctetString();
 			case "date":
-				return new asn1_14();
+				return new GeneralizedTime();
 			case "other":
 				return new OtherKeyAttribute();
 			default:
@@ -30278,11 +20870,11 @@ class RecipientKeyIdentifier
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_33({ name: (names.subjectKeyIdentifier || "") }),
-				new asn1_14({
+				new OctetString({ name: (names.subjectKeyIdentifier || "") }),
+				new GeneralizedTime({
 					optional: true,
 					name: (names.date || "")
 				}),
@@ -30306,7 +20898,7 @@ class RecipientKeyIdentifier
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			RecipientKeyIdentifier.schema({
 				names: {
@@ -30355,7 +20947,7 @@ class RecipientKeyIdentifier
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -30474,14 +21066,14 @@ class KeyAgreeRecipientIdentifier
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_8({
+		return (new Choice({
 			value: [
 				IssuerAndSerialNumber.schema(names.issuerAndSerialNumber || {
 					names: {
 						blockName: (names.blockName || "")
 					}
 				}),
-				new asn1_39({
+				new Constructed({
 					name: (names.blockName || ""),
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -30510,7 +21102,7 @@ class KeyAgreeRecipientIdentifier
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			KeyAgreeRecipientIdentifier.schema({
 				names: {
@@ -30534,7 +21126,7 @@ class KeyAgreeRecipientIdentifier
 			this.variant = 2;
 
 			this.value = new RecipientKeyIdentifier({
-				schema: new asn1_36({
+				schema: new Sequence({
 					value: asn1.result.blockName.valueBlock.value
 				})
 			});
@@ -30554,7 +21146,7 @@ class KeyAgreeRecipientIdentifier
 			case 1:
 				return this.value.toSchema();
 			case 2:
-				return new asn1_39({
+				return new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
@@ -30562,7 +21154,7 @@ class KeyAgreeRecipientIdentifier
 					value: this.value.toSchema().valueBlock.value
 				});
 			default:
-				return new asn1_7();
+				return new Any();
 		}
 		//endregion
 	}
@@ -30630,7 +21222,7 @@ class RecipientEncryptedKey
 			case "rid":
 				return new KeyAgreeRecipientIdentifier();
 			case "encryptedKey":
-				return new asn1_33();
+				return new OctetString();
 			default:
 				throw new Error(`Invalid member name for RecipientEncryptedKey class: ${memberName}`);
 		}
@@ -30679,11 +21271,11 @@ class RecipientEncryptedKey
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				KeyAgreeRecipientIdentifier.schema(names.rid || {}),
-				new asn1_33({ name: (names.encryptedKey || "") })
+				new OctetString({ name: (names.encryptedKey || "") })
 			]
 		}));
 	}
@@ -30702,7 +21294,7 @@ class RecipientEncryptedKey
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			RecipientEncryptedKey.schema({
 				names: {
@@ -30733,7 +21325,7 @@ class RecipientEncryptedKey
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				this.rid.toSchema(),
 				this.encryptedKey
@@ -30836,10 +21428,10 @@ class RecipientEncryptedKeys
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.RecipientEncryptedKeys || ""),
 					value: RecipientEncryptedKey.schema()
 				})
@@ -30860,7 +21452,7 @@ class RecipientEncryptedKeys
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			RecipientEncryptedKeys.schema({
 				names: {
@@ -30885,7 +21477,7 @@ class RecipientEncryptedKeys
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: Array.from(this.encryptedKeys, element => element.toSchema())
 		}));
 		//endregion
@@ -30974,7 +21566,7 @@ class KeyAgreeRecipientInfo
 			case "originator":
 				return new OriginatorIdentifierOrKey();
 			case "ukm":
-				return new asn1_33();
+				return new OctetString();
 			case "keyEncryptionAlgorithm":
 				return new AlgorithmIdentifier();
 			case "recipientEncryptedKeys":
@@ -31041,11 +21633,11 @@ class KeyAgreeRecipientInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: names.blockName || "",
 			value: [
-				new asn1_31({ name: names.version || "" }),
-				new asn1_39({
+				new Integer({ name: names.version || "" }),
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
@@ -31054,13 +21646,13 @@ class KeyAgreeRecipientInfo
 						OriginatorIdentifierOrKey.schema(names.originator || {})
 					]
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
 					},
-					value: [new asn1_33({ name: names.ukm || "" })]
+					value: [new OctetString({ name: names.ukm || "" })]
 				}),
 				AlgorithmIdentifier.schema(names.keyEncryptionAlgorithm || {}),
 				RecipientEncryptedKeys.schema(names.recipientEncryptedKeys || {})
@@ -31085,7 +21677,7 @@ class KeyAgreeRecipientInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			KeyAgreeRecipientInfo.schema({
 				names: {
@@ -31135,8 +21727,8 @@ class KeyAgreeRecipientInfo
 		//region Create array for final sequence
 		const outputArray = [];
 
-		outputArray.push(new asn1_31({ value: this.version }));
-		outputArray.push(new asn1_39({
+		outputArray.push(new Integer({ value: this.version }));
+		outputArray.push(new Constructed({
 			idBlock: {
 				tagClass: 3, // CONTEXT-SPECIFIC
 				tagNumber: 0 // [0]
@@ -31146,7 +21738,7 @@ class KeyAgreeRecipientInfo
 
 		if("ukm" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -31161,7 +21753,7 @@ class KeyAgreeRecipientInfo
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -31240,9 +21832,9 @@ class KEKIdentifier
 		switch(memberName)
 		{
 			case "keyIdentifier":
-				return new asn1_33();
+				return new OctetString();
 			case "date":
-				return new asn1_14();
+				return new GeneralizedTime();
 			case "other":
 				return new OtherKeyAttribute();
 			default:
@@ -31303,11 +21895,11 @@ class KEKIdentifier
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_33({ name: (names.keyIdentifier || "") }),
-				new asn1_14({
+				new OctetString({ name: (names.keyIdentifier || "") }),
+				new GeneralizedTime({
 					optional: true,
 					name: (names.date || "")
 				}),
@@ -31331,7 +21923,7 @@ class KEKIdentifier
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			KEKIdentifier.schema({
 				names: {
@@ -31380,7 +21972,7 @@ class KEKIdentifier
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -31471,7 +22063,7 @@ class KEKRecipientInfo
 			case "keyEncryptionAlgorithm":
 				return new AlgorithmIdentifier();
 			case "encryptedKey":
-				return new asn1_33();
+				return new OctetString();
 			case "preDefinedKEK":
 				return new ArrayBuffer(0);
 			default:
@@ -31532,13 +22124,13 @@ class KEKRecipientInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.version || "") }),
+				new Integer({ name: (names.version || "") }),
 				KEKIdentifier.schema(names.kekid || {}),
 				AlgorithmIdentifier.schema(names.keyEncryptionAlgorithm || {}),
-				new asn1_33({ name: (names.encryptedKey || "") })
+				new OctetString({ name: (names.encryptedKey || "") })
 			]
 		}));
 	}
@@ -31559,7 +22151,7 @@ class KEKRecipientInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			KEKRecipientInfo.schema({
 				names: {
@@ -31598,9 +22190,9 @@ class KEKRecipientInfo
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_31({ value: this.version }),
+				new Integer({ value: this.version }),
 				this.kekid.toSchema(),
 				this.keyEncryptionAlgorithm.toSchema(),
 				this.encryptedKey
@@ -31692,7 +22284,7 @@ class PasswordRecipientinfo
 			case "keyEncryptionAlgorithm":
 				return new AlgorithmIdentifier();
 			case "encryptedKey":
-				return new asn1_33();
+				return new OctetString();
 			case "password":
 				return new ArrayBuffer(0);
 			default:
@@ -31749,11 +22341,11 @@ class PasswordRecipientinfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.version || "") }),
-				new asn1_39({
+				new Integer({ name: (names.version || "") }),
+				new Constructed({
 					name: (names.keyDerivationAlgorithm || ""),
 					optional: true,
 					idBlock: {
@@ -31763,7 +22355,7 @@ class PasswordRecipientinfo
 					value: AlgorithmIdentifier.schema().valueBlock.value
 				}),
 				AlgorithmIdentifier.schema(names.keyEncryptionAlgorithm || {}),
-				new asn1_33({ name: (names.encryptedKey || "") })
+				new OctetString({ name: (names.encryptedKey || "") })
 			]
 		}));
 	}
@@ -31784,7 +22376,7 @@ class PasswordRecipientinfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PasswordRecipientinfo.schema({
 				names: {
@@ -31810,7 +22402,7 @@ class PasswordRecipientinfo
 		if("keyDerivationAlgorithm" in asn1.result)
 		{
 			this.keyDerivationAlgorithm = new AlgorithmIdentifier({
-				schema: new asn1_36({
+				schema: new Sequence({
 					value: asn1.result.keyDerivationAlgorithm.valueBlock.value
 				})
 			});
@@ -31830,11 +22422,11 @@ class PasswordRecipientinfo
 		//region Create output array for sequence
 		const outputArray = [];
 
-		outputArray.push(new asn1_31({ value: this.version }));
+		outputArray.push(new Integer({ value: this.version }));
 
 		if("keyDerivationAlgorithm" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -31848,7 +22440,7 @@ class PasswordRecipientinfo
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -31962,11 +22554,11 @@ class OtherRecipientInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.oriType || "") }),
-				new asn1_7({ name: (names.oriValue || "") })
+				new ObjectIdentifier({ name: (names.oriType || "") }),
+				new Any({ name: (names.oriValue || "") })
 			]
 		}));
 	}
@@ -31985,7 +22577,7 @@ class OtherRecipientInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			OtherRecipientInfo.schema({
 				names: {
@@ -32012,9 +22604,9 @@ class OtherRecipientInfo
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_29({ value: this.oriType }),
+				new ObjectIdentifier({ value: this.oriType }),
 				this.oriValue
 			]
 		}));
@@ -32137,14 +22729,14 @@ class RecipientInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_8({
+		return (new Choice({
 			value: [
 				KeyTransRecipientInfo.schema({
 					names: {
 						blockName: (names.blockName || "")
 					}
 				}),
-				new asn1_39({
+				new Constructed({
 					name: (names.blockName || ""),
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -32152,7 +22744,7 @@ class RecipientInfo
 					},
 					value: KeyAgreeRecipientInfo.schema().valueBlock.value
 				}),
-				new asn1_39({
+				new Constructed({
 					name: (names.blockName || ""),
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -32160,7 +22752,7 @@ class RecipientInfo
 					},
 					value: KEKRecipientInfo.schema().valueBlock.value
 				}),
-				new asn1_39({
+				new Constructed({
 					name: (names.blockName || ""),
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -32168,7 +22760,7 @@ class RecipientInfo
 					},
 					value: PasswordRecipientinfo.schema().valueBlock.value
 				}),
-				new asn1_39({
+				new Constructed({
 					name: (names.blockName || ""),
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -32193,7 +22785,7 @@ class RecipientInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			RecipientInfo.schema({
 				names: {
@@ -32215,7 +22807,7 @@ class RecipientInfo
 		else
 		{
 			//region Create "SEQUENCE" from "ASN1_CONSTRUCTED"
-			const blockSequence = new asn1_36({
+			const blockSequence = new Sequence({
 				value: asn1.result.blockName.valueBlock.value
 			});
 			//endregion
@@ -32268,7 +22860,7 @@ class RecipientInfo
 
 				return _schema;
 			default:
-				return new asn1_7();
+				return new Any();
 		}
 		//endregion
 	}
@@ -32341,20 +22933,20 @@ class RSAESOAEPParams
 			case "hashAlgorithm":
 				return new AlgorithmIdentifier({
 					algorithmId: "1.3.14.3.2.26", // SHA-1
-					algorithmParams: new asn1_34()
+					algorithmParams: new Null()
 				});
 			case "maskGenAlgorithm":
 				return new AlgorithmIdentifier({
 					algorithmId: "1.2.840.113549.1.1.8", // MGF1
 					algorithmParams: (new AlgorithmIdentifier({
 						algorithmId: "1.3.14.3.2.26", // SHA-1
-						algorithmParams: new asn1_34()
+						algorithmParams: new Null()
 					})).toSchema()
 				});
 			case "pSourceAlgorithm":
 				return new AlgorithmIdentifier({
 					algorithmId: "1.2.840.113549.1.1.9", // id-pSpecified
-					algorithmParams: new asn1_33({ valueHex: (new Uint8Array([0xda, 0x39, 0xa3, 0xee, 0x5e, 0x6b, 0x4b, 0x0d, 0x32, 0x55, 0xbf, 0xef, 0x95, 0x60, 0x18, 0x90, 0xaf, 0xd8, 0x07, 0x09])).buffer }) // SHA-1 hash of empty string
+					algorithmParams: new OctetString({ valueHex: (new Uint8Array([0xda, 0x39, 0xa3, 0xee, 0x5e, 0x6b, 0x4b, 0x0d, 0x32, 0x55, 0xbf, 0xef, 0x95, 0x60, 0x18, 0x90, 0xaf, 0xd8, 0x07, 0x09])).buffer }) // SHA-1 hash of empty string
 				});
 			default:
 				throw new Error(`Invalid member name for RSAESOAEPParams class: ${memberName}`);
@@ -32387,10 +22979,10 @@ class RSAESOAEPParams
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_39({
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
@@ -32398,7 +22990,7 @@ class RSAESOAEPParams
 					optional: true,
 					value: [AlgorithmIdentifier.schema(names.hashAlgorithm || {})]
 				}),
-				new asn1_39({
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
@@ -32406,7 +22998,7 @@ class RSAESOAEPParams
 					optional: true,
 					value: [AlgorithmIdentifier.schema(names.maskGenAlgorithm || {})]
 				}),
-				new asn1_39({
+				new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 2 // [2]
@@ -32433,7 +23025,7 @@ class RSAESOAEPParams
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			RSAESOAEPParams.schema({
 				names: {
@@ -32483,7 +23075,7 @@ class RSAESOAEPParams
 		
 		if(!this.hashAlgorithm.isEqual(RSAESOAEPParams.defaultValues("hashAlgorithm")))
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -32494,7 +23086,7 @@ class RSAESOAEPParams
 		
 		if(!this.maskGenAlgorithm.isEqual(RSAESOAEPParams.defaultValues("maskGenAlgorithm")))
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 1 // [1]
@@ -32505,7 +23097,7 @@ class RSAESOAEPParams
 
 		if(!this.pSourceAlgorithm.isEqual(RSAESOAEPParams.defaultValues("pSourceAlgorithm")))
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 2 // [2]
@@ -32516,7 +23108,7 @@ class RSAESOAEPParams
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -32597,9 +23189,9 @@ class ECCCMSSharedInfo
 			case "keyInfo":
 				return new AlgorithmIdentifier();
 			case "entityUInfo":
-				return new asn1_33();
+				return new OctetString();
 			case "suppPubInfo":
-				return new asn1_33();
+				return new OctetString();
 			default:
 				throw new Error(`Invalid member name for ECCCMSSharedInfo class: ${memberName}`);
 		}
@@ -32648,26 +23240,26 @@ class ECCCMSSharedInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				AlgorithmIdentifier.schema(names.keyInfo || {}),
-				new asn1_39({
+				new Constructed({
 					name: (names.entityUInfo || ""),
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
 					optional: true,
-					value: [new asn1_33()]
+					value: [new OctetString()]
 				}),
-				new asn1_39({
+				new Constructed({
 					name: (names.suppPubInfo || ""),
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 2 // [2]
 					},
-					value: [new asn1_33()]
+					value: [new OctetString()]
 				})
 			]
 		}));
@@ -32688,7 +23280,7 @@ class ECCCMSSharedInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			ECCCMSSharedInfo.schema({
 				names: {
@@ -32730,7 +23322,7 @@ class ECCCMSSharedInfo
 		
 		if("entityUInfo" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -32739,7 +23331,7 @@ class ECCCMSSharedInfo
 			}));
 		}
 		
-		outputArray.push(new asn1_39({
+		outputArray.push(new Constructed({
 			idBlock: {
 				tagClass: 3, // CONTEXT-SPECIFIC
 				tagNumber: 2 // [2]
@@ -32749,7 +23341,7 @@ class ECCCMSSharedInfo
 		//endregion 
 		
 		//region Construct and return new ASN.1 schema for this object 
-		return new asn1_36({
+		return new Sequence({
 			value: outputArray
 		});
 		//endregion 
@@ -32906,11 +23498,11 @@ class EnvelopedData
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.version || "") }),
-				new asn1_39({
+				new Integer({ name: (names.version || "") }),
+				new Constructed({
 					name: (names.originatorInfo || ""),
 					optional: true,
 					idBlock: {
@@ -32919,23 +23511,23 @@ class EnvelopedData
 					},
 					value: OriginatorInfo.schema().valueBlock.value
 				}),
-				new asn1_35({
+				new Set({
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.recipientInfos || ""),
 							value: RecipientInfo.schema()
 						})
 					]
 				}),
 				EncryptedContentInfo.schema(names.encryptedContentInfo || {}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
 					},
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.unprotectedAttrs || ""),
 							value: Attribute.schema()
 						})
@@ -32962,7 +23554,7 @@ class EnvelopedData
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			EnvelopedData.schema({
 				names: {
@@ -32989,7 +23581,7 @@ class EnvelopedData
 		if("originatorInfo" in asn1.result)
 		{
 			this.originatorInfo = new OriginatorInfo({
-				schema: new asn1_36({
+				schema: new Sequence({
 					value: asn1.result.originatorInfo.valueBlock.value
 				})
 			});
@@ -33012,11 +23604,11 @@ class EnvelopedData
 		//region Create array for output sequence
 		const outputArray = [];
 		
-		outputArray.push(new asn1_31({ value: this.version }));
+		outputArray.push(new Integer({ value: this.version }));
 		
 		if("originatorInfo" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -33026,7 +23618,7 @@ class EnvelopedData
 			}));
 		}
 		
-		outputArray.push(new asn1_35({
+		outputArray.push(new Set({
 			value: Array.from(this.recipientInfos, element => element.toSchema())
 		}));
 		
@@ -33034,7 +23626,7 @@ class EnvelopedData
 		
 		if("unprotectedAttrs" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -33046,7 +23638,7 @@ class EnvelopedData
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -33134,7 +23726,7 @@ class EnvelopedData
 				
 					const hashAlgorithm = new AlgorithmIdentifier({
 						algorithmId: hashOID,
-						algorithmParams: new asn1_34()
+						algorithmParams: new Null()
 					});
 				
 					const rsaOAEPParams = new RSAESOAEPParams({
@@ -33195,7 +23787,7 @@ class EnvelopedData
 				
 					const aesKW = new AlgorithmIdentifier({
 						algorithmId: aesKWoid,
-						algorithmParams: new asn1_34()
+						algorithmParams: new Null()
 					});
 					//endregion
 
@@ -33216,7 +23808,7 @@ class EnvelopedData
 					const keyInfo = new KeyAgreeRecipientInfo({
 						version: 3,
 						// "originator" will be calculated in "encrypt" function because ephemeral key would be generated there
-						ukm: new asn1_33({ valueHex: ukmBuffer }),
+						ukm: new OctetString({ valueHex: ukmBuffer }),
 						keyEncryptionAlgorithm: new AlgorithmIdentifier({
 							algorithmId: ecdhOID,
 							algorithmParams: aesKW.toSchema()
@@ -33289,7 +23881,7 @@ class EnvelopedData
 		}
 		
 		if(("keyEncryptionAlgorithmParams" in encryptionParameters) === false)
-			encryptionParameters.keyEncryptionAlgorithmParams = new asn1_34();
+			encryptionParameters.keyEncryptionAlgorithmParams = new Null();
 		//endregion
 		
 		//region Add new recipient based on passed variant
@@ -33307,7 +23899,7 @@ class EnvelopedData
 					const keyInfo = new KEKRecipientInfo({
 						version: 4,
 						kekid: new KEKIdentifier({
-							keyIdentifier: new asn1_33({ valueHex: encryptionParameters.keyIdentifier })
+							keyIdentifier: new OctetString({ valueHex: encryptionParameters.keyIdentifier })
 						}),
 						keyEncryptionAlgorithm: new AlgorithmIdentifier({
 							algorithmId: kekOID,
@@ -33358,11 +23950,11 @@ class EnvelopedData
 
 					//region PBKDF2-params
 					const pbkdf2Params = new PBKDF2Params({
-						salt: new asn1_33({ valueHex: saltBuffer }),
+						salt: new OctetString({ valueHex: saltBuffer }),
 						iterationCount: encryptionParameters.iterationCount,
 						prf: new AlgorithmIdentifier({
 							algorithmId: hmacOID,
-							algorithmParams: new asn1_34()
+							algorithmParams: new Null()
 						})
 					});
 					//endregion
@@ -33488,9 +24080,9 @@ class EnvelopedData
 				contentType: "1.2.840.113549.1.7.1", // "data"
 				contentEncryptionAlgorithm: new AlgorithmIdentifier({
 					algorithmId: contentEncryptionOID,
-					algorithmParams: new asn1_33({ valueHex: ivBuffer })
+					algorithmParams: new OctetString({ valueHex: ivBuffer })
 				}),
-				encryptedContent: new asn1_33({ valueHex: encryptedContent })
+				encryptedContent: new OctetString({ valueHex: encryptedContent })
 			});
 		}, error =>
 			Promise.reject(error));
@@ -33516,7 +24108,7 @@ class EnvelopedData
 			{
 				const curveObject = _this.recipientInfos[index].value.recipientCertificate.subjectPublicKeyInfo.algorithm.algorithmParams;
 				
-				if((curveObject instanceof asn1_29) === false)
+				if((curveObject instanceof ObjectIdentifier) === false)
 					return Promise.reject(`Incorrect "recipientCertificate" for index ${index}`);
 				
 				const curveOID = curveObject.valueBlock.toString();
@@ -33633,10 +24225,10 @@ class EnvelopedData
 							 But since early implementations all put NULL here. Thus, in order to be
 							 "backward compatible", index also put NULL here.
 							 */
-							algorithmParams: new asn1_34()
+							algorithmParams: new Null()
 						}),
 						entityUInfo: _this.recipientInfos[index].value.ukm,
-						suppPubInfo: new asn1_33({ valueHex: kwLengthBuffer })
+						suppPubInfo: new OctetString({ valueHex: kwLengthBuffer })
 					});
 					
 					const encodedInfo = eccInfo.toSchema().toBER(false);
@@ -33670,7 +24262,7 @@ class EnvelopedData
 			currentSequence = currentSequence.then(result =>
 			{
 				//region OriginatorIdentifierOrKey
-				const asn1 = asn1_1(exportedECDHPublicKey);
+				const asn1 = fromBER(exportedECDHPublicKey);
 					
 				const originator = new OriginatorIdentifierOrKey();
 				originator.variant = 3;
@@ -33686,7 +24278,7 @@ class EnvelopedData
 				/*
 				 We will not support using of same ephemeral key for many recipients
 				 */
-				_this.recipientInfos[index].value.recipientEncryptedKeys.encryptedKeys[0].encryptedKey = new asn1_33({ valueHex: result });
+				_this.recipientInfos[index].value.recipientEncryptedKeys.encryptedKeys[0].encryptedKey = new OctetString({ valueHex: result });
 				//endregion
 
 				return {ecdhPrivateKey};
@@ -33753,7 +24345,7 @@ class EnvelopedData
 			currentSequence = currentSequence.then(result =>
 			{
 				//region RecipientEncryptedKey
-				_this.recipientInfos[index].value.encryptedKey = new asn1_33({ valueHex: result });
+				_this.recipientInfos[index].value.encryptedKey = new OctetString({ valueHex: result });
 				//endregion
 			}, error =>
 				Promise.reject(error)
@@ -33800,7 +24392,7 @@ class EnvelopedData
 			currentSequence = currentSequence.then(result =>
 			{
 				//region RecipientEncryptedKey
-				_this.recipientInfos[index].value.encryptedKey = new asn1_33({ valueHex: result });
+				_this.recipientInfos[index].value.encryptedKey = new OctetString({ valueHex: result });
 				//endregion
 			}, error =>
 				Promise.reject(error)
@@ -33912,7 +24504,7 @@ class EnvelopedData
 			currentSequence = currentSequence.then(result =>
 			{
 				//region RecipientEncryptedKey
-				_this.recipientInfos[index].value.encryptedKey = new asn1_33({ valueHex: result });
+				_this.recipientInfos[index].value.encryptedKey = new OctetString({ valueHex: result });
 				//endregion
 			}, error =>
 				Promise.reject(error)
@@ -34015,7 +24607,7 @@ class EnvelopedData
 					
 				const curveObject = decryptionParameters.recipientCertificate.subjectPublicKeyInfo.algorithm.algorithmParams;
 					
-				if((curveObject instanceof asn1_29) === false)
+				if((curveObject instanceof ObjectIdentifier) === false)
 					return Promise.reject(`Incorrect "recipientCertificate" for index ${index}`);
 					
 				curveOID = curveObject.valueBlock.toString();
@@ -34058,7 +24650,7 @@ class EnvelopedData
 					
 				//region Change "OriginatorPublicKey" if "curve" parameter absent
 				if(("algorithmParams" in _this.recipientInfos[index].value.originator.value.algorithm) === false)
-					_this.recipientInfos[index].value.originator.value.algorithm.algorithmParams = new asn1_29({ value: curveOID });
+					_this.recipientInfos[index].value.originator.value.algorithm.algorithmParams = new ObjectIdentifier({ value: curveOID });
 				//endregion
 				
 				//region Create ArrayBuffer with sender's public key
@@ -34126,10 +24718,10 @@ class EnvelopedData
 							 But since early implementations all put NULL here. Thus, in order to be
 							 "backward compatible", index also put NULL here.
 							 */
-							algorithmParams: new asn1_34()
+							algorithmParams: new Null()
 						}),
 						entityUInfo: _this.recipientInfos[index].value.ukm,
-						suppPubInfo: new asn1_33({ valueHex: kwLengthBuffer })
+						suppPubInfo: new OctetString({ valueHex: kwLengthBuffer })
 					});
 					
 					const encodedInfo = eccInfo.toSchema().toBER(false);
@@ -34577,10 +25169,10 @@ class AuthenticatedSafe
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.contentInfos || ""),
 					value: ContentInfo.schema()
 				})
@@ -34601,7 +25193,7 @@ class AuthenticatedSafe
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			AuthenticatedSafe.schema({
 				names: {
@@ -34626,7 +25218,7 @@ class AuthenticatedSafe
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: Array.from(this.safeContents, element => element.toSchema())
 		}));
 		//endregion
@@ -34676,7 +25268,7 @@ class AuthenticatedSafe
 				case "1.2.840.113549.1.7.1":
 					{
 						//region Check that we do have OCTETSTRING as "content"
-						if((content.content instanceof asn1_33) === false)
+						if((content.content instanceof OctetString) === false)
 							return Promise.reject("Wrong type of \"this.safeContents[j].content\"");
 						//endregion
 						
@@ -34693,7 +25285,7 @@ class AuthenticatedSafe
 						//endregion
 						
 						//region Parse internal ASN.1 data
-						const asn1 = asn1_1(authSafeContent);
+						const asn1 = fromBER(authSafeContent);
 						if(asn1.offset === (-1))
 							return Promise.reject("Error during parsing of ASN.1 data inside \"content.content\"");
 						//endregion
@@ -34741,7 +25333,7 @@ class AuthenticatedSafe
 							 */
 							result =>
 							{
-								const asn1 = asn1_1(result);
+								const asn1 = fromBER(result);
 								if(asn1.offset === (-1))
 									return Promise.reject("Error during parsing of decrypted data");
 								
@@ -34787,7 +25379,7 @@ class AuthenticatedSafe
 							 */
 							result =>
 							{
-								const asn1 = asn1_1(result);
+								const asn1 = fromBER(result);
 								if(asn1.offset === (-1))
 									return Promise.reject("Error during parsing of decrypted data");
 								
@@ -34874,7 +25466,7 @@ class AuthenticatedSafe
 							{
 								this.safeContents.push(new ContentInfo({
 									contentType: "1.2.840.113549.1.7.1",
-									content: new asn1_33({ valueHex: contentBuffer })
+									content: new OctetString({ valueHex: contentBuffer })
 								}));
 							});
 					}
@@ -35047,9 +25639,9 @@ class CertID
 				return new AlgorithmIdentifier();
 			case "issuerNameHash":
 			case "issuerKeyHash":
-				return new asn1_33();
+				return new OctetString();
 			case "serialNumber":
-				return new asn1_31();
+				return new Integer();
 			default:
 				throw new Error(`Invalid member name for CertID class: ${memberName}`);
 		}
@@ -35103,7 +25695,7 @@ class CertID
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				AlgorithmIdentifier.schema(names.hashAlgorithmObject || {
@@ -35111,9 +25703,9 @@ class CertID
 						blockName: (names.hashAlgorithm || "")
 					}
 				}),
-				new asn1_33({ name: (names.issuerNameHash || "") }),
-				new asn1_33({ name: (names.issuerKeyHash || "") }),
-				new asn1_31({ name: (names.serialNumber || "") })
+				new OctetString({ name: (names.issuerNameHash || "") }),
+				new OctetString({ name: (names.issuerKeyHash || "") }),
+				new Integer({ name: (names.serialNumber || "") })
 			]
 		}));
 	}
@@ -35134,7 +25726,7 @@ class CertID
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			CertID.schema({
 				names: {
@@ -35165,7 +25757,7 @@ class CertID
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				this.hashAlgorithm.toSchema(),
 				this.issuerNameHash,
@@ -35250,7 +25842,7 @@ class CertID
 		
 		this.hashAlgorithm = new AlgorithmIdentifier({
 			algorithmId: hashOID,
-			algorithmParams: new asn1_34()
+			algorithmParams: new Null()
 		});
 		
 		if("issuerCertificate" in parameters)
@@ -35274,7 +25866,7 @@ class CertID
 		//region Create "issuerKeyHash"
 		sequence = sequence.then(result =>
 		{
-			this.issuerNameHash = new asn1_33({ valueHex: result });
+			this.issuerNameHash = new OctetString({ valueHex: result });
 			
 			const issuerKeyBuffer = issuerCertificate.subjectPublicKeyInfo.subjectPublicKey.valueBlock.valueHex;
 			
@@ -35283,7 +25875,7 @@ class CertID
 			Promise.reject(error)
 		).then(result =>
 		{
-			this.issuerKeyHash = new asn1_33({ valueHex: result });
+			this.issuerKeyHash = new OctetString({ valueHex: result });
 		}, error =>
 			Promise.reject(error)
 		);
@@ -35434,13 +26026,13 @@ class SingleResponse
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				CertID.schema(names.certID || {}),
-				new asn1_8({
+				new Choice({
 					value: [
-						new asn1_40({
+						new Primitive({
 							name: (names.certStatus || ""),
 							idBlock: {
 								tagClass: 3, // CONTEXT-SPECIFIC
@@ -35448,25 +26040,25 @@ class SingleResponse
 							},
 							lenBlockLength: 1 // The length contains one byte 0x00
 						}), // IMPLICIT NULL (no "valueBlock")
-						new asn1_39({
+						new Constructed({
 							name: (names.certStatus || ""),
 							idBlock: {
 								tagClass: 3, // CONTEXT-SPECIFIC
 								tagNumber: 1 // [1]
 							},
 							value: [
-								new asn1_14(),
-								new asn1_39({
+								new GeneralizedTime(),
+								new Constructed({
 									optional: true,
 									idBlock: {
 										tagClass: 3, // CONTEXT-SPECIFIC
 										tagNumber: 0 // [0]
 									},
-									value: [new asn1_30()]
+									value: [new Enumerated()]
 								})
 							]
 						}),
-						new asn1_40({
+						new Primitive({
 							name: (names.certStatus || ""),
 							idBlock: {
 								tagClass: 3, // CONTEXT-SPECIFIC
@@ -35476,16 +26068,16 @@ class SingleResponse
 						}) // IMPLICIT NULL (no "valueBlock")
 					]
 				}),
-				new asn1_14({ name: (names.thisUpdate || "") }),
-				new asn1_39({
+				new GeneralizedTime({ name: (names.thisUpdate || "") }),
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
-					value: [new asn1_14({ name: (names.nextUpdate || "") })]
+					value: [new GeneralizedTime({ name: (names.nextUpdate || "") })]
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -35514,7 +26106,7 @@ class SingleResponse
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			SingleResponse.schema({
 				names: {
@@ -35563,28 +26155,28 @@ class SingleResponse
 
 		outputArray.push(this.certID.toSchema());
 		outputArray.push(this.certStatus);
-		outputArray.push(new asn1_14({ valueDate: this.thisUpdate }));
+		outputArray.push(new GeneralizedTime({ valueDate: this.thisUpdate }));
 		if("nextUpdate" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
 				},
-				value: [new asn1_14({ valueDate: this.nextUpdate })]
+				value: [new GeneralizedTime({ valueDate: this.nextUpdate })]
 			}));
 		}
 
 		if("singleExtensions" in this)
 		{
-			outputArray.push(new asn1_36({
+			outputArray.push(new Sequence({
 				value: Array.from(this.singleExtensions, element => element.toSchema())
 			}));
 		}
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -35739,20 +26331,20 @@ class ResponseData
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || "ResponseData"),
 			value: [
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
-					value: [new asn1_31({ name: (names.version || "ResponseData.version") })]
+					value: [new Integer({ name: (names.version || "ResponseData.version") })]
 				}),
-				new asn1_8({
+				new Choice({
 					value: [
-						new asn1_39({
+						new Constructed({
 							name: (names.responderID || "ResponseData.responderID"),
 							idBlock: {
 								tagClass: 3, // CONTEXT-SPECIFIC
@@ -35764,26 +26356,26 @@ class ResponseData
 								}
 							})]
 						}),
-						new asn1_39({
+						new Constructed({
 							name: (names.responderID || "ResponseData.responderID"),
 							idBlock: {
 								tagClass: 3, // CONTEXT-SPECIFIC
 								tagNumber: 2 // [2]
 							},
-							value: [new asn1_33({ name: (names.ResponseDataByKey || "ResponseData.byKey") })]
+							value: [new OctetString({ name: (names.ResponseDataByKey || "ResponseData.byKey") })]
 						})
 					]
 				}),
-				new asn1_14({ name: (names.producedAt || "ResponseData.producedAt") }),
-				new asn1_36({
+				new GeneralizedTime({ name: (names.producedAt || "ResponseData.producedAt") }),
+				new Sequence({
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: "ResponseData.responses",
 							value: SingleResponse.schema(names.response || {})
 						})
 					]
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -35817,7 +26409,7 @@ class ResponseData
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			ResponseData.schema()
 		);
@@ -35860,7 +26452,7 @@ class ResponseData
 			if(this.tbs.length === 0) // No stored certificate TBS part
 				return ResponseData.schema();
 			
-			tbsSchema = asn1_1(this.tbs).result;
+			tbsSchema = fromBER(this.tbs).result;
 		}
 		//endregion 
 		//region Create TBS schema via assembling from TBS parts
@@ -35870,18 +26462,18 @@ class ResponseData
 			
 			if("version" in this)
 			{
-				outputArray.push(new asn1_39({
+				outputArray.push(new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
-					value: [new asn1_31({ value: this.version })]
+					value: [new Integer({ value: this.version })]
 				}));
 			}
 			
 			if(this.responderID instanceof RelativeDistinguishedNames)
 			{
-				outputArray.push(new asn1_39({
+				outputArray.push(new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
@@ -35891,7 +26483,7 @@ class ResponseData
 			}
 			else
 			{
-				outputArray.push(new asn1_39({
+				outputArray.push(new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 2 // [2]
@@ -35900,26 +26492,26 @@ class ResponseData
 				}));
 			}
 			
-			outputArray.push(new asn1_14({ valueDate: this.producedAt }));
+			outputArray.push(new GeneralizedTime({ valueDate: this.producedAt }));
 
-			outputArray.push(new asn1_36({
+			outputArray.push(new Sequence({
 				value: Array.from(this.responses, element => element.toSchema())
 			}));
 			
 			if("responseExtensions" in this)
 			{
-				outputArray.push(new asn1_39({
+				outputArray.push(new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
 					},
-					value: [new asn1_36({
+					value: [new Sequence({
 						value: Array.from(this.responseExtensions, element => element.toSchema())
 					})]
 				}));
 			}
 			
-			tbsSchema = new asn1_36({
+			tbsSchema = new Sequence({
 				value: outputArray
 			});
 		}
@@ -37922,7 +28514,7 @@ class BasicOCSPResponse
 			case "signatureAlgorithm":
 				return new AlgorithmIdentifier();
 			case "signature":
-				return new asn1_32();
+				return new BitString();
 			case "certs":
 				return [];
 			default:
@@ -37990,7 +28582,7 @@ class BasicOCSPResponse
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || "BasicOCSPResponse"),
 			value: [
 				ResponseData.schema(names.tbsResponseData || {
@@ -38003,16 +28595,16 @@ class BasicOCSPResponse
 						blockName: "BasicOCSPResponse.signatureAlgorithm"
 					}
 				}),
-				new asn1_32({ name: (names.signature || "BasicOCSPResponse.signature") }),
-				new asn1_39({
+				new BitString({ name: (names.signature || "BasicOCSPResponse.signature") }),
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
 					value: [
-						new asn1_36({
-							value: [new asn1_6({
+						new Sequence({
+							value: [new Repeated({
 								name: "BasicOCSPResponse.certs",
 								value: Certificate.schema(names.certs || {})
 							})]
@@ -38039,7 +28631,7 @@ class BasicOCSPResponse
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			BasicOCSPResponse.schema()
 		);
@@ -38074,13 +28666,13 @@ class BasicOCSPResponse
 		//region Create array of certificates
 		if("certs" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
 				},
 				value: [
-					new asn1_36({
+					new Sequence({
 						value: Array.from(this.certs, element => element.toSchema())
 					})
 				]
@@ -38090,7 +28682,7 @@ class BasicOCSPResponse
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -38258,7 +28850,7 @@ class BasicOCSPResponse
 		
 		sequence = sequence.then(result =>
 		{
-			this.signature = new asn1_32({ valueHex: result });
+			this.signature = new BitString({ valueHex: result });
 		});
 		//endregion
 		
@@ -38352,7 +28944,7 @@ class BasicOCSPResponse
 					}
 				});
 				break;
-			case (this.tbsResponseData.responderID instanceof asn1_33): // [2] KeyHash
+			case (this.tbsResponseData.responderID instanceof OctetString): // [2] KeyHash
 				sequence = sequence.then(() => Promise.all(Array.from(_this.certs, element =>
 					crypto.digest({ name: "sha-1" }, new Uint8Array(element.subjectPublicKeyInfo.subjectPublicKey.valueBlock.valueHex)))).then(results =>
 				{
@@ -38439,10 +29031,10 @@ function CertificationRequestInfo(parameters = {})
 	 */
 	const names = getParametersValue(parameters, "names", {});
 	
-	return (new asn1_36({
+	return (new Sequence({
 		name: (names.CertificationRequestInfo || "CertificationRequestInfo"),
 		value: [
-			new asn1_31({ name: (names.CertificationRequestInfoVersion || "CertificationRequestInfo.version") }),
+			new Integer({ name: (names.CertificationRequestInfoVersion || "CertificationRequestInfo.version") }),
 			RelativeDistinguishedNames.schema(names.subject || {
 				names: {
 					blockName: "CertificationRequestInfo.subject"
@@ -38453,14 +29045,14 @@ function CertificationRequestInfo(parameters = {})
 					blockName: "CertificationRequestInfo.subjectPublicKeyInfo"
 				}
 			}),
-			new asn1_39({
+			new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
 				},
 				value: [
-					new asn1_6({
+					new Repeated({
 						optional: true, // Because OpenSSL makes wrong "attributes" field
 						name: (names.CertificationRequestInfoAttributes || "CertificationRequestInfo.attributes"),
 						value: Attribute.schema(names.attributes || {})
@@ -38552,7 +29144,7 @@ class CertificationRequest
 			case "signatureAlgorithm":
 				return new AlgorithmIdentifier();
 			case "signatureValue":
-				return new asn1_32();
+				return new BitString();
 			default:
 				throw new Error(`Invalid member name for CertificationRequest class: ${memberName}`);
 		}
@@ -38584,17 +29176,17 @@ class CertificationRequest
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				CertificationRequestInfo(names.certificationRequestInfo || {}),
-				new asn1_36({
+				new Sequence({
 					name: (names.signatureAlgorithm || "signatureAlgorithm"),
 					value: [
-						new asn1_29(),
-						new asn1_7({ optional: true })
+						new ObjectIdentifier(),
+						new Any({ optional: true })
 					]
 				}),
-				new asn1_32({ name: (names.signatureValue || "signatureValue") })
+				new BitString({ name: (names.signatureValue || "signatureValue") })
 			]
 		}));
 	}
@@ -38618,7 +29210,7 @@ class CertificationRequest
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			CertificationRequest.schema()
 		);
@@ -38649,14 +29241,14 @@ class CertificationRequest
 	{
 		//region Create array for output sequence
 		const outputArray = [
-			new asn1_31({ value: this.version }),
+			new Integer({ value: this.version }),
 			this.subject.toSchema(),
 			this.subjectPublicKeyInfo.toSchema()
 		];
 		
 		if("attributes" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -38666,7 +29258,7 @@ class CertificationRequest
 		}
 		//endregion
 		
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 	}
@@ -38685,7 +29277,7 @@ class CertificationRequest
 			if(this.tbs.byteLength === 0) // No stored TBS part
 				return CertificationRequest.schema();
 			
-			tbsSchema = asn1_1(this.tbs).result;
+			tbsSchema = fromBER(this.tbs).result;
 		}
 		//endregion
 		//region Create TBS schema via assembling from TBS parts
@@ -38694,7 +29286,7 @@ class CertificationRequest
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				tbsSchema,
 				this.signatureAlgorithm.toSchema(),
@@ -38768,7 +29360,7 @@ class CertificationRequest
 		
 		sequence = sequence.then(result =>
 		{
-			this.signatureValue = new asn1_32({ valueHex: result });
+			this.signatureValue = new BitString({ valueHex: result });
 		});
 		//endregion
 		
@@ -38839,7 +29431,7 @@ class DigestInfo
 			case "digestAlgorithm":
 				return new AlgorithmIdentifier();
 			case "digest":
-				return new asn1_33();
+				return new OctetString();
 			default:
 				throw new Error(`Invalid member name for DigestInfo class: ${memberName}`);
 		}
@@ -38890,7 +29482,7 @@ class DigestInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				AlgorithmIdentifier.schema(names.digestAlgorithm || {
@@ -38898,7 +29490,7 @@ class DigestInfo
 						blockName: "digestAlgorithm"
 					}
 				}),
-				new asn1_33({ name: (names.digest || "digest") })
+				new OctetString({ name: (names.digest || "digest") })
 			]
 		}));
 	}
@@ -38917,7 +29509,7 @@ class DigestInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			DigestInfo.schema({
 				names: {
@@ -38948,7 +29540,7 @@ class DigestInfo
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				this.digestAlgorithm.toSchema(),
 				this.digest
@@ -39006,7 +29598,7 @@ class EncapsulatedContentInfo
 				//region Divide OCTETSTRING value down to small pieces
 				if(this.eContent.idBlock.isConstructed === false)
 				{
-					const constrString = new asn1_33({
+					const constrString = new OctetString({
 						idBlock: { isConstructed: true },
 						isConstructed: true
 					});
@@ -39023,7 +29615,7 @@ class EncapsulatedContentInfo
 						for(let i = 0; i < _view.length; i++)
 							_view[i] = pieceView[i];
 						
-						constrString.valueBlock.value.push(new asn1_33({ valueHex: _array }));
+						constrString.valueBlock.value.push(new OctetString({ valueHex: _array }));
 						
 						length -= pieceView.length;
 						offset += pieceView.length;
@@ -39053,7 +29645,7 @@ class EncapsulatedContentInfo
 			case "eContentType":
 				return "";
 			case "eContent":
-				return new asn1_33();
+				return new OctetString();
 			default:
 				throw new Error(`Invalid member name for EncapsulatedContentInfo class: ${memberName}`);
 		}
@@ -39106,18 +29698,18 @@ class EncapsulatedContentInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.eContentType || "") }),
-				new asn1_39({
+				new ObjectIdentifier({ name: (names.eContentType || "") }),
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
 					value: [
-						new asn1_7({ name: (names.eContent || "") }) // In order to aling this with PKCS#7 and CMS as well
+						new Any({ name: (names.eContent || "") }) // In order to aling this with PKCS#7 and CMS as well
 					]
 				})
 			]
@@ -39138,7 +29730,7 @@ class EncapsulatedContentInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			EncapsulatedContentInfo.schema({
 				names: {
@@ -39168,12 +29760,12 @@ class EncapsulatedContentInfo
 		//region Create array for output sequence 
 		const outputArray = [];
 		
-		outputArray.push(new asn1_29({ value: this.eContentType }));
+		outputArray.push(new ObjectIdentifier({ value: this.eContentType }));
 		if("eContent" in this)
 		{
 			if(EncapsulatedContentInfo.compareWithDefault("eContent", this.eContent) === false)
 			{
-				outputArray.push(new asn1_39({
+				outputArray.push(new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -39186,7 +29778,7 @@ class EncapsulatedContentInfo
 		//endregion 
 		
 		//region Construct and return new ASN.1 schema for this object 
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion 
@@ -39285,7 +29877,7 @@ class MacData
 			case "mac":
 				return new DigestInfo();
 			case "macSalt":
-				return new asn1_33();
+				return new OctetString();
 			case "iterations":
 				return 1;
 			default:
@@ -39344,7 +29936,7 @@ class MacData
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			optional: (names.optional || true),
 			value: [
@@ -39353,8 +29945,8 @@ class MacData
 						blockName: "mac"
 					}
 				}),
-				new asn1_33({ name: (names.macSalt || "macSalt") }),
-				new asn1_31({
+				new OctetString({ name: (names.macSalt || "macSalt") }),
+				new Integer({
 					optional: true,
 					name: (names.iterations || "iterations")
 				})
@@ -39377,7 +29969,7 @@ class MacData
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			MacData.schema({
 				names: {
@@ -39418,9 +30010,9 @@ class MacData
 		];
 		
 		if("iterations" in this)
-			outputArray.push(new asn1_31({ value: this.iterations }));
+			outputArray.push(new Integer({ value: this.iterations }));
 		
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -39490,7 +30082,7 @@ class MessageImprint
 			case "hashAlgorithm":
 				return new AlgorithmIdentifier();
 			case "hashedMessage":
-				return new asn1_33();
+				return new OctetString();
 			default:
 				throw new Error(`Invalid member name for MessageImprint class: ${memberName}`);
 		}
@@ -39537,11 +30129,11 @@ class MessageImprint
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				AlgorithmIdentifier.schema(names.hashAlgorithm || {}),
-				new asn1_33({ name: (names.hashedMessage || "") })
+				new OctetString({ name: (names.hashedMessage || "") })
 			]
 		}));
 	}
@@ -39560,7 +30152,7 @@ class MessageImprint
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			MessageImprint.schema({
 				names: {
@@ -39591,7 +30183,7 @@ class MessageImprint
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
 				this.hashAlgorithm.toSchema(),
 				this.hashedMessage
@@ -39709,11 +30301,11 @@ class Request
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				CertID.schema(names.reqCert || {}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -39743,7 +30335,7 @@ class Request
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			Request.schema({
 				names: {
@@ -39786,14 +30378,14 @@ class Request
 
 		if("singleRequestExtensions" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
 				},
 				value: [
-					new asn1_36({
+					new Sequence({
 						value: Array.from(this.singleRequestExtensions, element => element.toSchema())
 					})
 				]
@@ -39802,7 +30394,7 @@ class Request
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -39957,18 +30549,18 @@ class TBSRequest
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || "TBSRequest"),
 			value: [
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
-					value: [new asn1_31({ name: (names.TBSRequestVersion || "TBSRequest.version") })]
+					value: [new Integer({ name: (names.TBSRequestVersion || "TBSRequest.version") })]
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -39980,16 +30572,16 @@ class TBSRequest
 						}
 					})]
 				}),
-				new asn1_36({
+				new Sequence({
 					name: (names.requestList || "TBSRequest.requestList"),
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.requests || "TBSRequest.requests"),
 							value: Request.schema(names.requestNames || {})
 						})
 					]
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -40022,7 +30614,7 @@ class TBSRequest
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			TBSRequest.schema()
 		);
@@ -40061,7 +30653,7 @@ class TBSRequest
 			if(this.tbs.byteLength === 0) // No stored TBS part
 				return TBSRequest.schema();
 
-			tbsSchema = asn1_1(this.tbs).result;
+			tbsSchema = fromBER(this.tbs).result;
 		}
 		//endregion
 		//region Create TBS schema via assembling from TBS parts
@@ -40071,18 +30663,18 @@ class TBSRequest
 
 			if("version" in this)
 			{
-				outputArray.push(new asn1_39({
+				outputArray.push(new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
-					value: [new asn1_31({ value: this.version })]
+					value: [new Integer({ value: this.version })]
 				}));
 			}
 
 			if("requestorName" in this)
 			{
-				outputArray.push(new asn1_39({
+				outputArray.push(new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
@@ -40091,26 +30683,26 @@ class TBSRequest
 				}));
 			}
 
-			outputArray.push(new asn1_36({
+			outputArray.push(new Sequence({
 				value: Array.from(this.requestList, element => element.toSchema())
 			}));
 
 			if("requestExtensions" in this)
 			{
-				outputArray.push(new asn1_39({
+				outputArray.push(new Constructed({
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 2 // [2]
 					},
 					value: [
-						new asn1_36({
+						new Sequence({
 							value: Array.from(this.requestExtensions, element => element.toSchema())
 						})
 					]
 				}));
 			}
 
-			tbsSchema = new asn1_36({
+			tbsSchema = new Sequence({
 				value: outputArray
 			});
 		}
@@ -40197,7 +30789,7 @@ class Signature
 			case "signatureAlgorithm":
 				return new AlgorithmIdentifier();
 			case "signature":
-				return new asn1_32();
+				return new BitString();
 			case "certs":
 				return [];
 			default:
@@ -40250,20 +30842,20 @@ class Signature
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
 				AlgorithmIdentifier.schema(names.signatureAlgorithm || {}),
-				new asn1_32({ name: (names.signature || "") }),
-				new asn1_39({
+				new BitString({ name: (names.signature || "") }),
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
 					value: [
-						new asn1_36({
-							value: [new asn1_6({
+						new Sequence({
+							value: [new Repeated({
 								name: (names.certs || ""),
 								value: Certificate.schema(names.certs || {})
 							})]
@@ -40289,7 +30881,7 @@ class Signature
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			Signature.schema({
 				names: {
@@ -40331,14 +30923,14 @@ class Signature
 
 		if("certs" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
 				},
 				value: [
-					new asn1_36({
+					new Sequence({
 						value: Array.from(this.certs, element => element.toSchema())
 					})
 				]
@@ -40347,7 +30939,7 @@ class Signature
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -40473,7 +31065,7 @@ class OCSPRequest
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: names.blockName || "OCSPRequest",
 			value: [
 				TBSRequest.schema(names.tbsRequest || {
@@ -40481,7 +31073,7 @@ class OCSPRequest
 						blockName: "tbsRequest"
 					}
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -40513,7 +31105,7 @@ class OCSPRequest
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			OCSPRequest.schema()
 		);
@@ -40545,7 +31137,7 @@ class OCSPRequest
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -40656,7 +31248,7 @@ class OCSPRequest
 		
 		sequence = sequence.then(result =>
 		{
-			this.optionalSignature.signature = new asn1_32({ valueHex: result });
+			this.optionalSignature.signature = new BitString({ valueHex: result });
 		});
 		//endregion
 		
@@ -40715,7 +31307,7 @@ class ResponseBytes
 			case "responseType":
 				return "";
 			case "response":
-				return new asn1_33();
+				return new OctetString();
 			default:
 				throw new Error(`Invalid member name for ResponseBytes class: ${memberName}`);
 		}
@@ -40762,11 +31354,11 @@ class ResponseBytes
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_29({ name: (names.responseType || "") }),
-				new asn1_33({ name: (names.response || "") })
+				new ObjectIdentifier({ name: (names.responseType || "") }),
+				new OctetString({ name: (names.response || "") })
 			]
 		}));
 	}
@@ -40785,7 +31377,7 @@ class ResponseBytes
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			ResponseBytes.schema({
 				names: {
@@ -40812,9 +31404,9 @@ class ResponseBytes
 	toSchema()
 	{
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: [
-				new asn1_29({ value: this.responseType }),
+				new ObjectIdentifier({ value: this.responseType }),
 				this.response
 			]
 		}));
@@ -40880,7 +31472,7 @@ class OCSPResponse
 		switch(memberName)
 		{
 			case "responseStatus":
-				return new asn1_30();
+				return new Enumerated();
 			case "responseBytes":
 				return new ResponseBytes();
 			default:
@@ -40940,11 +31532,11 @@ class OCSPResponse
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || "OCSPResponse"),
 			value: [
-				new asn1_30({ name: (names.responseStatus || "responseStatus") }),
-				new asn1_39({
+				new Enumerated({ name: (names.responseStatus || "responseStatus") }),
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -40976,7 +31568,7 @@ class OCSPResponse
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			OCSPResponse.schema()
 		);
@@ -41004,7 +31596,7 @@ class OCSPResponse
 		outputArray.push(this.responseStatus);
 		if("responseBytes" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -41015,7 +31607,7 @@ class OCSPResponse
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -41063,7 +31655,7 @@ class OCSPResponse
 
 		try
 		{
-			const asn1Basic = asn1_1(this.responseBytes.response.valueBlock.valueHex);
+			const asn1Basic = fromBER(this.responseBytes.response.valueBlock.valueHex);
 			basicResponse = new BasicOCSPResponse({ schema: asn1Basic.result });
 		}
 		catch(ex)
@@ -41086,7 +31678,7 @@ class OCSPResponse
 		//region Check that ResponseData has type BasicOCSPResponse and sign it
 		if(this.responseBytes.responseType === "1.3.6.1.5.5.7.48.1.1")
 		{
-			const asn1 = asn1_1(this.responseBytes.response.valueBlock.valueHex);
+			const asn1 = fromBER(this.responseBytes.response.valueBlock.valueHex);
 			const basicResponse = new BasicOCSPResponse({ schema: asn1.result });
 
 			return basicResponse.sign(privateKey, hashAlgorithm);
@@ -41111,7 +31703,7 @@ class OCSPResponse
 		//region Check that ResponceData has type BasicOCSPResponse and verify it
 		if(this.responseBytes.responseType === "1.3.6.1.5.5.7.48.1.1")
 		{
-			const asn1 = asn1_1(this.responseBytes.response.valueBlock.valueHex);
+			const asn1 = fromBER(this.responseBytes.response.valueBlock.valueHex);
 			const basicResponse = new BasicOCSPResponse({ schema: asn1.result });
 
 			if(issuerCertificate !== null)
@@ -41232,7 +31824,7 @@ class SignedAndUnsignedAttributes
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_39({
+		return (new Constructed({
 			name: (names.blockName || ""),
 			optional: true,
 			idBlock: {
@@ -41240,7 +31832,7 @@ class SignedAndUnsignedAttributes
 				tagNumber: names.tagNumber // "SignedAttributes" = 0, "UnsignedAttributes" = 1
 			},
 			value: [
-				new asn1_6({
+				new Repeated({
 					name: (names.attributes || ""),
 					value: Attribute.schema()
 				})
@@ -41261,7 +31853,7 @@ class SignedAndUnsignedAttributes
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			SignedAndUnsignedAttributes.schema({
 				names: {
@@ -41306,7 +31898,7 @@ class SignedAndUnsignedAttributes
 			throw new Error("Incorrectly initialized \"SignedAndUnsignedAttributes\" class");
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_39({
+		return (new Constructed({
 			optional: true,
 			idBlock: {
 				tagClass: 3, // CONTEXT-SPECIFIC
@@ -41409,7 +32001,7 @@ class SignerInfo
 			case "version":
 				return 0;
 			case "sid":
-				return new asn1_7();
+				return new Any();
 			case "digestAlgorithm":
 				return new AlgorithmIdentifier();
 			case "signedAttrs":
@@ -41417,7 +32009,7 @@ class SignerInfo
 			case "signatureAlgorithm":
 				return new AlgorithmIdentifier();
 			case "signature":
-				return new asn1_33();
+				return new OctetString();
 			case "unsignedAttrs":
 				return new SignedAndUnsignedAttributes({ type: 1 });
 			default:
@@ -41437,7 +32029,7 @@ class SignerInfo
 			case "version":
 				return (SignerInfo.defaultValues("version") === memberValue);
 			case "sid":
-				return (memberValue instanceof asn1_7);
+				return (memberValue instanceof Any);
 			case "digestAlgorithm":
 				if((memberValue instanceof AlgorithmIdentifier) === false)
 					return false;
@@ -41503,25 +32095,25 @@ class SignerInfo
 		const names = getParametersValue(parameters, "names", {});
 
 		return (
-			new asn1_36({
+			new Sequence({
 				name: "SignerInfo",
 				value: [
-					new asn1_31({ name: (names.version || "SignerInfo.version") }),
-					new asn1_8({
+					new Integer({ name: (names.version || "SignerInfo.version") }),
+					new Choice({
 						value: [
 							IssuerAndSerialNumber.schema(names.sid || {
 								names: {
 									blockName: "SignerInfo.sid"
 								}
 							}),
-							new asn1_39({
+							new Constructed({
 								optional: true,
 								name: (names.sid || "SignerInfo.sid"),
 								idBlock: {
 									tagClass: 3, // CONTEXT-SPECIFIC
 									tagNumber: 0 // [0]
 								},
-								value: [new asn1_33()]
+								value: [new OctetString()]
 							})
 						]
 					}),
@@ -41541,7 +32133,7 @@ class SignerInfo
 							blockName: "SignerInfo.signatureAlgorithm"
 						}
 					}),
-					new asn1_33({ name: (names.signature || "SignerInfo.signature") }),
+					new OctetString({ name: (names.signature || "SignerInfo.signature") }),
 					SignedAndUnsignedAttributes.schema(names.unsignedAttrs || {
 						names: {
 							blockName: "SignerInfo.unsignedAttrs",
@@ -41572,7 +32164,7 @@ class SignerInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			SignerInfo.schema()
 		);
@@ -41613,7 +32205,7 @@ class SignerInfo
 		//region Create array for output sequence 
 		const outputArray = [];
 		
-		outputArray.push(new asn1_31({ value: this.version }));
+		outputArray.push(new Integer({ value: this.version }));
 		
 		if(this.sid instanceof IssuerAndSerialNumber)
 			outputArray.push(this.sid.toSchema());
@@ -41639,7 +32231,7 @@ class SignerInfo
 		//endregion 
 		
 		//region Construct and return new ASN.1 schema for this object 
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion 
@@ -41658,7 +32250,7 @@ class SignerInfo
 			version: this.version
 		};
 
-		if(!(this.sid instanceof asn1_7))
+		if(!(this.sid instanceof Any))
 			_object.sid = this.sid.toJSON();
 
 		_object.digestAlgorithm = this.digestAlgorithm.toJSON();
@@ -41776,7 +32368,7 @@ class TSTInfo
 			case "messageImprint":
 				return new MessageImprint();
 			case "serialNumber":
-				return new asn1_31();
+				return new Integer();
 			case "genTime":
 				return new Date(0, 0, 0);
 			case "accuracy":
@@ -41784,7 +32376,7 @@ class TSTInfo
 			case "ordering":
 				return false;
 			case "nonce":
-				return new asn1_31();
+				return new Integer();
 			case "tsa":
 				return new GeneralName();
 			case "extensions":
@@ -41867,32 +32459,32 @@ class TSTInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || "TSTInfo"),
 			value: [
-				new asn1_31({ name: (names.version || "TSTInfo.version") }),
-				new asn1_29({ name: (names.policy || "TSTInfo.policy") }),
+				new Integer({ name: (names.version || "TSTInfo.version") }),
+				new ObjectIdentifier({ name: (names.policy || "TSTInfo.policy") }),
 				MessageImprint.schema(names.messageImprint || {
 					names: {
 						blockName: "TSTInfo.messageImprint"
 					}
 				}),
-				new asn1_31({ name: (names.serialNumber || "TSTInfo.serialNumber") }),
-				new asn1_14({ name: (names.genTime || "TSTInfo.genTime") }),
+				new Integer({ name: (names.serialNumber || "TSTInfo.serialNumber") }),
+				new GeneralizedTime({ name: (names.genTime || "TSTInfo.genTime") }),
 				Accuracy.schema(names.accuracy || {
 					names: {
 						blockName: "TSTInfo.accuracy"
 					}
 				}),
-				new asn1_37({
+				new Boolean({
 					name: (names.ordering || "TSTInfo.ordering"),
 					optional: true
 				}),
-				new asn1_31({
+				new Integer({
 					name: (names.nonce || "TSTInfo.nonce"),
 					optional: true
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -41904,14 +32496,14 @@ class TSTInfo
 						}
 					})]
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 1 // [1]
 					},
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.extensions || "TSTInfo.extensions"),
 							value: Extension.schema(names.extension || {})
 						})
@@ -41943,7 +32535,7 @@ class TSTInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			TSTInfo.schema()
 		);
@@ -41980,20 +32572,20 @@ class TSTInfo
 		//region Create array for output sequence
 		const outputArray = [];
 
-		outputArray.push(new asn1_31({ value: this.version }));
-		outputArray.push(new asn1_29({ value: this.policy }));
+		outputArray.push(new Integer({ value: this.version }));
+		outputArray.push(new ObjectIdentifier({ value: this.policy }));
 		outputArray.push(this.messageImprint.toSchema());
 		outputArray.push(this.serialNumber);
-		outputArray.push(new asn1_14({ valueDate: this.genTime }));
+		outputArray.push(new GeneralizedTime({ valueDate: this.genTime }));
 		if("accuracy" in this)
 			outputArray.push(this.accuracy.toSchema());
 		if("ordering" in this)
-			outputArray.push(new asn1_37({ value: this.ordering }));
+			outputArray.push(new Boolean({ value: this.ordering }));
 		if("nonce" in this)
 			outputArray.push(this.nonce);
 		if("tsa" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -42006,7 +32598,7 @@ class TSTInfo
 		//region Create array of extensions
 		if("extensions" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				optional: true,
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
@@ -42019,7 +32611,7 @@ class TSTInfo
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -42277,14 +32869,14 @@ class SignedData
 		if(("optional" in names) === false)
 			names.optional = false;
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || "SignedData"),
 			optional: names.optional,
 			value: [
-				new asn1_31({ name: (names.version || "SignedData.version") }),
-				new asn1_35({
+				new Integer({ name: (names.version || "SignedData.version") }),
+				new Set({
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.digestAlgorithms || "SignedData.digestAlgorithms"),
 							value: AlgorithmIdentifier.schema()
 						})
@@ -42295,7 +32887,7 @@ class SignedData
 						blockName: "SignedData.encapContentInfo"
 					}
 				}),
-				new asn1_39({
+				new Constructed({
 					name: (names.certificates || "SignedData.certificates"),
 					optional: true,
 					idBlock: {
@@ -42304,7 +32896,7 @@ class SignedData
 					},
 					value: CertificateSet.schema().valueBlock.value
 				}), // IMPLICIT CertificateSet
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
@@ -42316,9 +32908,9 @@ class SignedData
 						}
 					}).valueBlock.value
 				}), // IMPLICIT RevocationInfoChoices
-				new asn1_35({
+				new Set({
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.signerInfos || "SignedData.signerInfos"),
 							value: SignerInfo.schema()
 						})
@@ -42346,7 +32938,7 @@ class SignedData
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			SignedData.schema()
 		);
@@ -42366,7 +32958,7 @@ class SignedData
 		if("SignedData.certificates" in asn1.result)
 		{
 			const certificateSet = new CertificateSet({
-				schema: new asn1_35({
+				schema: new Set({
 					value: asn1.result["SignedData.certificates"].valueBlock.value
 				})
 			});
@@ -42403,10 +32995,10 @@ class SignedData
 		//region Create array for output sequence
 		const outputArray = [];
 		
-		outputArray.push(new asn1_31({ value: this.version }));
+		outputArray.push(new Integer({ value: this.version }));
 		
 		//region Create array of digest algorithms
-		outputArray.push(new asn1_35({
+		outputArray.push(new Set({
 			value: Array.from(this.digestAlgorithms, algorithm => algorithm.toSchema(encodeFlag))
 		}));
 		//endregion
@@ -42418,7 +33010,7 @@ class SignedData
 			const certificateSet = new CertificateSet({ certificates: this.certificates });
 			const certificateSetSchema = certificateSet.toSchema();
 			
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3,
 					tagNumber: 0
@@ -42429,7 +33021,7 @@ class SignedData
 		
 		if("crls" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 1 // [1]
@@ -42452,14 +33044,14 @@ class SignedData
 		}
 		
 		//region Create array of signer infos
-		outputArray.push(new asn1_35({
+		outputArray.push(new Set({
 			value: Array.from(this.signerInfos, signerInfo => signerInfo.toSchema(encodeFlag))
 		}));
 		//endregion
 		//endregion
 		
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -42668,7 +33260,7 @@ class SignedData
 				//endregion
 				
 				//region Initialize TST_INFO value
-				const asn1 = asn1_1(this.encapContentInfo.eContent.valueBlock.valueHex);
+				const asn1 = fromBER(this.encapContentInfo.eContent.valueBlock.valueHex);
 				let tstInfo;
 				
 				try
@@ -43097,13 +33689,13 @@ class SignedData
 		{
 			this.digestAlgorithms.push(new AlgorithmIdentifier({
 				algorithmId: hashAlgorithmOID,
-				algorithmParams: new asn1_34()
+				algorithmParams: new Null()
 			}));
 		}
 		
 		this.signerInfos[signerIndex].digestAlgorithm = new AlgorithmIdentifier({
 			algorithmId: hashAlgorithmOID,
-			algorithmParams: new asn1_34()
+			algorithmParams: new Null()
 		});
 		//endregion
 		
@@ -43168,7 +33760,7 @@ class SignedData
 		
 		sequence = sequence.then(result =>
 		{
-			this.signerInfos[signerIndex].signature = new asn1_33({ valueHex: result });
+			this.signerInfos[signerIndex].signature = new OctetString({ valueHex: result });
 			
 			return result;
 		});
@@ -43299,10 +33891,10 @@ class PFX
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.version || "version") }),
+				new Integer({ name: (names.version || "version") }),
 				ContentInfo.schema(names.authSafe || {
 					names: {
 						blockName: "authSafe"
@@ -43333,7 +33925,7 @@ class PFX
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PFX.schema({
 				names: {
@@ -43373,14 +33965,14 @@ class PFX
 	{
 		//region Construct and return new ASN.1 schema for this object
 		const outputArray = [
-			new asn1_31({ value: this.version }),
+			new Integer({ value: this.version }),
 			this.authSafe.toSchema()
 		];
 		
 		if("macData" in this)
 			outputArray.push(this.macData.toSchema());
 		
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -43465,7 +34057,7 @@ class PFX
 
 					this.authSafe = new ContentInfo({
 						contentType: "1.2.840.113549.1.7.1",
-						content: new asn1_33({ valueHex: data })
+						content: new OctetString({ valueHex: data })
 					});
 					//endregion
 					
@@ -43495,9 +34087,9 @@ class PFX
 									digestAlgorithm: new AlgorithmIdentifier({
 										algorithmId: getOIDByAlgorithm({ name: parameters.hmacHashAlgorithm })
 									}),
-									digest: new asn1_33({ valueHex: result })
+									digest: new OctetString({ valueHex: result })
 								}),
-								macSalt: new asn1_33({ valueHex: saltBuffer }),
+								macSalt: new OctetString({ valueHex: saltBuffer }),
 								iterations: parameters.iterations
 							});
 						},
@@ -43535,7 +34127,7 @@ class PFX
 						version: 1,
 						encapContentInfo: new EncapsulatedContentInfo({
 							eContentType: "1.2.840.113549.1.7.1", // "data" content type
-							eContent: new asn1_33({ valueHex: toBeSigned })
+							eContent: new OctetString({ valueHex: toBeSigned })
 						}),
 						certificates: [parameters.signingCertificate]
 					});
@@ -43560,7 +34152,7 @@ class PFX
 							signedAttr.push(new Attribute({
 								type: "1.2.840.113549.1.9.3",
 								values: [
-									new asn1_29({ value: "1.2.840.113549.1.7.1" })
+									new ObjectIdentifier({ value: "1.2.840.113549.1.7.1" })
 								]
 							}));
 							//endregion
@@ -43568,7 +34160,7 @@ class PFX
 							signedAttr.push(new Attribute({
 								type: "1.2.840.113549.1.9.5",
 								values: [
-									new asn1_15({ valueDate: new Date() })
+									new UTCTime({ valueDate: new Date() })
 								]
 							}));
 							//endregion
@@ -43576,7 +34168,7 @@ class PFX
 							signedAttr.push(new Attribute({
 								type: "1.2.840.113549.1.9.4",
 								values: [
-									new asn1_33({ valueHex: result })
+									new OctetString({ valueHex: result })
 								]
 							}));
 							//endregion
@@ -43669,7 +34261,7 @@ class PFX
 					//endregion
 				
 					//region Check that we do have OCTETSTRING as "content"
-					if((this.authSafe.content instanceof asn1_33) === false)
+					if((this.authSafe.content instanceof OctetString) === false)
 						return Promise.reject("Wrong type of \"this.authSafe.content\"");
 					//endregion
 					
@@ -43686,7 +34278,7 @@ class PFX
 					//endregion
 					
 					//region Parse internal ASN.1 data
-					const asn1 = asn1_1(authSafeContent);
+					const asn1 = fromBER(authSafeContent);
 					if(asn1.offset === (-1))
 						return Promise.reject("Error during parsing of ASN.1 data inside \"this.authSafe.content\"");
 					//endregion
@@ -43756,7 +34348,7 @@ class PFX
 					if(("eContent" in cmsSigned.encapContentInfo) === false)
 						return Promise.reject("Absent of attached data in \"cmsSigned.encapContentInfo\"");
 				
-					if((cmsSigned.encapContentInfo.eContent instanceof asn1_33) === false)
+					if((cmsSigned.encapContentInfo.eContent instanceof OctetString) === false)
 						return Promise.reject("Wrong type of \"cmsSigned.encapContentInfo.eContent\"");
 					//endregion
 				
@@ -43773,7 +34365,7 @@ class PFX
 					//endregion
 				
 					//region Parse internal ASN.1 data
-					const asn1 = asn1_1(data);
+					const asn1 = fromBER(data);
 					if(asn1.offset === (-1))
 						return Promise.reject("Error during parsing of ASN.1 data inside \"this.authSafe.content\"");
 					//endregion
@@ -43872,7 +34464,7 @@ class PKIStatusInfo
 			case "statusStrings":
 				return [];
 			case "failInfo":
-				return new asn1_32();
+				return new BitString();
 			default:
 				throw new Error(`Invalid member name for PKIStatusInfo class: ${memberName}`);
 		}
@@ -43923,20 +34515,20 @@ class PKIStatusInfo
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || ""),
 			value: [
-				new asn1_31({ name: (names.status || "") }),
-				new asn1_36({
+				new Integer({ name: (names.status || "") }),
+				new Sequence({
 					optional: true,
 					value: [
-						new asn1_6({
+						new Repeated({
 							name: (names.statusStrings || ""),
-							value: new asn1_28()
+							value: new Utf8String()
 						})
 					]
 				}),
-				new asn1_32({
+				new BitString({
 					name: (names.failInfo || ""),
 					optional: true
 				})
@@ -43959,7 +34551,7 @@ class PKIStatusInfo
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			PKIStatusInfo.schema({
 				names: {
@@ -44000,11 +34592,11 @@ class PKIStatusInfo
 		//region Create array of output sequence
 		const outputArray = [];
 
-		outputArray.push(new asn1_31({ value: this.status }));
+		outputArray.push(new Integer({ value: this.status }));
 
 		if("statusStrings" in this)
 		{
-			outputArray.push(new asn1_36({
+			outputArray.push(new Sequence({
 				optional: true,
 				value: this.statusStrings
 			}));
@@ -44015,7 +34607,7 @@ class PKIStatusInfo
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -44119,7 +34711,7 @@ class TimeStampReq
 			case "reqPolicy":
 				return "";
 			case "nonce":
-				return new asn1_31();
+				return new Integer();
 			case "certReq":
 				return false;
 			case "extensions":
@@ -44184,34 +34776,34 @@ class TimeStampReq
 		 */
 		const names = getParametersValue(parameters, "names", {});
 		
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || "TimeStampReq"),
 			value: [
-				new asn1_31({ name: (names.version || "TimeStampReq.version") }),
+				new Integer({ name: (names.version || "TimeStampReq.version") }),
 				MessageImprint.schema(names.messageImprint || {
 					names: {
 						blockName: "TimeStampReq.messageImprint"
 					}
 				}),
-				new asn1_29({
+				new ObjectIdentifier({
 					name: (names.reqPolicy || "TimeStampReq.reqPolicy"),
 					optional: true
 				}),
-				new asn1_31({
+				new Integer({
 					name: (names.nonce || "TimeStampReq.nonce"),
 					optional: true
 				}),
-				new asn1_37({
+				new Boolean({
 					name: (names.certReq || "TimeStampReq.certReq"),
 					optional: true
 				}),
-				new asn1_39({
+				new Constructed({
 					optional: true,
 					idBlock: {
 						tagClass: 3, // CONTEXT-SPECIFIC
 						tagNumber: 0 // [0]
 					},
-					value: [new asn1_6({
+					value: [new Repeated({
 						name: (names.extensions || "TimeStampReq.extensions"),
 						value: Extension.schema()
 					})]
@@ -44238,7 +34830,7 @@ class TimeStampReq
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			TimeStampReq.schema()
 		);
@@ -44270,19 +34862,19 @@ class TimeStampReq
 		//region Create array for output sequence
 		const outputArray = [];
 
-		outputArray.push(new asn1_31({ value: this.version }));
+		outputArray.push(new Integer({ value: this.version }));
 		outputArray.push(this.messageImprint.toSchema());
 		if("reqPolicy" in this)
-			outputArray.push(new asn1_29({ value: this.reqPolicy }));
+			outputArray.push(new ObjectIdentifier({ value: this.reqPolicy }));
 		if("nonce" in this)
 			outputArray.push(this.nonce);
 		if(("certReq" in this) && (TimeStampReq.compareWithDefault("certReq", this.certReq) === false))
-			outputArray.push(new asn1_37({ value: this.certReq }));
+			outputArray.push(new Boolean({ value: this.certReq }));
 
 		//region Create array of extensions
 		if("extensions" in this)
 		{
-			outputArray.push(new asn1_39({
+			outputArray.push(new Constructed({
 				idBlock: {
 					tagClass: 3, // CONTEXT-SPECIFIC
 					tagNumber: 0 // [0]
@@ -44294,7 +34886,7 @@ class TimeStampReq
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion
@@ -44396,7 +34988,7 @@ class TimeStampResp
 						(("failInfo" in memberValue) === false));
 			case "timeStampToken":
 				return ((memberValue.contentType === "") &&
-						(memberValue.content instanceof asn1_7));
+						(memberValue.content instanceof Any));
 			default:
 				throw new Error(`Invalid member name for TimeStampResp class: ${memberName}`);
 		}
@@ -44425,7 +35017,7 @@ class TimeStampResp
 		 */
 		const names = getParametersValue(parameters, "names", {});
 
-		return (new asn1_36({
+		return (new Sequence({
 			name: (names.blockName || "TimeStampResp"),
 			value: [
 				PKIStatusInfo.schema(names.status || {
@@ -44457,7 +35049,7 @@ class TimeStampResp
 		//endregion
 		
 		//region Check the schema is valid
-		const asn1 = asn1_2(schema,
+		const asn1 = compareSchema(schema,
 			schema,
 			TimeStampResp.schema()
 		);
@@ -44488,7 +35080,7 @@ class TimeStampResp
 		//endregion
 
 		//region Construct and return new ASN.1 schema for this object
-		return (new asn1_36({
+		return (new Sequence({
 			value: outputArray
 		}));
 		//endregion

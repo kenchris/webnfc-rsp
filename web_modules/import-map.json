@@ -5,7 +5,6 @@
     "@material/mwc-textfield": "./@material/mwc-textfield.js",
     "@material/mwc-top-app-bar": "./@material/mwc-top-app-bar.js",
     "lit-element": "./lit-element.js",
-    "lit-html": "./lit-html.js",
-    "pkijs": "./pkijs.js"
+    "lit-html": "./lit-html.js"
   }
 }
