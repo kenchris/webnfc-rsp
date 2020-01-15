@@ -13,6 +13,7 @@
     "serve": "es-dev-server --port 8081"
   },
   "dependencies": {
+    "@material/mwc-button": "^0.12.0",
     "@material/mwc-drawer": "^0.12.0",
     "@material/mwc-icon-button": "^0.12.0",
     "@material/mwc-textfield": "^0.12.0",

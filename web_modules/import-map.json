@@ -1,5 +1,6 @@
 {
   "imports": {
+    "@material/mwc-button": "./@material/mwc-button.js",
     "@material/mwc-drawer": "./@material/mwc-drawer.js",
     "@material/mwc-icon-button": "./@material/mwc-icon-button.js",
     "@material/mwc-textfield": "./@material/mwc-textfield.js",
