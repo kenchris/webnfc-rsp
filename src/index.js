@@ -6,7 +6,78 @@ import "../web_modules/@material/mwc-button.js";
 
 import { Certificate } from "../web_modules/@pkijs/pkijs/pkijs.js";
 import { fromBER } from "../web_modules/@pkijs/asn1js/asn1.js";
-import { bufferToHexCodes } from "../web_modules/@pkijs/pvutils/utils.js";
+
+import { style as listStyle } from './mwc-list-item-css.js';
+import './dismissable-item.js';
+
+export class TokenItem extends LitElement {
+  static styles = [
+    listStyle,
+    css`
+      :host {
+        width: 100%;
+        height: 100%;
+      }
+      mwc-icon-button {
+        display: none;
+      }
+      @media(hover: hover) {
+        dismissable-item:hover mwc-icon-button {
+          display: block;
+        }
+      }
+      .mdc-list-item {
+        height: 64px;
+      }
+      mwc-checkbox {
+        padding-right: 14px;
+      }
+      dismissable-item {
+        width: 100%;
+        height: 100%;
+        --item-bg-color: white;
+        padding: 0px ! important;
+        user-select: none;
+      }
+      div {
+        background-color: #E53935;
+      }
+    `
+  ];
+
+  static get properties() {
+    return { 
+      token: { type: String },
+      expiration: { type: String }
+    };
+  }
+
+  onchange(ev) {
+    this.dispatchEvent(new CustomEvent('change', { detail: { checked: ev.target.checked }}));
+  }
+
+  onremove(ev) {
+    ev.stopPropagation();
+    this.dispatchEvent(new Event('remove'));
+  }
+
+  render() {
+    return html`
+        <dismissable-item @remove=${this.onremove} role="listitem" class="mdc-list-item">
+          <span class="mdc-list-item__text">
+            ${this.token.substr(0, 8)}
+            <span class="mdc-list-item__secondary-text">${this.expiration}</span>
+          </span>
+          <mwc-icon-button class="mdc-list-item__meta"
+            aria-label="Delete item" title="Delete" icon="delete"
+            @click=${this.onremove} tabindex="-1">
+          </mwc-icon-button>
+        </dismissable-item>
+    `
+  }
+}
+
+customElements.define('token-item', TokenItem);
 
 class MainApplication extends LitElement {
   static styles = css`
@@ -25,8 +96,12 @@ class MainApplication extends LitElement {
     align-content: stretch;
   }
 
-  #keyhash {
-    font-size: 8px; 
+  #tokens {
+    width: 100%; 
+  }
+
+  hr {
+    width: 100%;
   }
   `;
 
@@ -66,11 +141,11 @@ class MainApplication extends LitElement {
   }
 
   // Kind of a layout hack
-  async updateInfo() {
+  async updateInfo(token) {
     const records = [{
       recordType: "text",
       data: {
-        token: this.tokens[this.tokens.length - 1].token,
+        token: token.token,
         fingerprint: await this.certificate.getKeyHash(),
         gateway: "rsp-software-toolkit-gateway"
       }
@@ -105,7 +180,7 @@ class MainApplication extends LitElement {
     const res = await fetch("files/rsp.der");
     const certificateBuffer = await res.arrayBuffer();
     this.loadCertificate(certificateBuffer)
-    this.updateInfo();
+    this.updateInfo(this.tokens[this.tokens.length - 1]);
   }
 
   render() {
@@ -128,9 +203,12 @@ class MainApplication extends LitElement {
             <mwc-button @click="${ev => this.uploadTokens(ev)}">
               Upload Tokens
             </mwc-button>
-            <br>
-            <div id="tokens">
-              <pre>${this.tokens.map(token => html`${JSON.stringify(token, null, ' ')}`)}</pre>
+            <hr>
+            <div id="tokens" role="list" class="mdc-list mdc-list--two-line">
+              ${this.tokens.map(token => html`
+                <token-item token=${token.token} expiration=${token.expirationTimestamp}
+                  @click=${_ => this.updateInfo(token)}></token-item>
+              `)}
             </div>
             <br>
             <div id="info">Information</div>
