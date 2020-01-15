@@ -108,29 +108,59 @@ class MainApplication extends LitElement {
   tokens = [];
 
   async uploadTokens(ev) {
-    const opts = {type: 'openDirectory'};
-    const handle = await window.chooseFileSystemEntries(opts);
-    const entries = await handle.getEntries();
+    const entries = await this.chooseFileSystemEntriesFlat({type: 'openDirectory'});
     const re = new RegExp('^token_[0-9_]+\.json$');
 
     this.tokens = [];
 
     for await (const entry of entries) {
-      if (entry.isFile && re.test(entry.name)) {
-        const file = await entry.getFile();
+      if (re.test(entry.name)) {
+        const file = entry;
         const text = await file.text();
         const json = JSON.parse(text);
         this.tokens.push(json);
       }
     }
     this.requestUpdate();
-
-    this.updateInfo();
   } 
 
+  constructor() {
+    super();
+    this.fileSelect = document.createElement("input");
+    this.fileSelect.type = "file";
+  }
+
+  async chooseFileSystemEntriesFlat(opts) {
+    const dir = opts && opts.type == 'openDirectory';
+
+    // Use Native Filesystem API is avaiable.
+    if ('chooseFileSystemEntries' in window) {
+      const handle = await window.chooseFileSystemEntries(opts);
+      if (dir) {
+        const files = [];
+        for await (const entry of handle.getEntries()) {
+          if (entry.isFile) {
+            files.push(await entry.getFile());
+          }
+        }
+        return files;
+      } else {
+        return await handle.getFile();
+      }
+    }
+
+    return new Promise(resolve => {
+      this.fileSelect.webkitdirectory = dir;
+      this.fileSelect.click();
+      this.fileSelect.addEventListener("change",
+        _ => resolve(dir ? this.fileSelect.files : this.fileSelect.files[0]),
+        { once: true }
+      );
+    });
+  }
+
   async uploadCertificate(ev) {
-    const fileHandle = await window.chooseFileSystemEntries();
-    const file = await fileHandle.getFile();
+    const file = await this.chooseFileSystemEntriesFlat();
     const contents = await file.arrayBuffer();
     this.loadCertificate(contents);
   } 
