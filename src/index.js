@@ -66,7 +66,7 @@ export class TokenItem extends LitElement {
         <dismissable-item @remove=${this.onremove} role="listitem" class="mdc-list-item">
           <span class="mdc-list-item__text">
             ${this.token.substr(0, 8)}
-            <span class="mdc-list-item__secondary-text">${this.expiration}</span>
+            <span class="mdc-list-item__secondary-text">${new Date(+this.expiration)}</span>
           </span>
           <mwc-icon-button class="mdc-list-item__meta"
             aria-label="Delete item" title="Delete" icon="delete"
