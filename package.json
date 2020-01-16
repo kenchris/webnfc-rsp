@@ -17,6 +17,7 @@
     "@material/mwc-dialog": "^0.12.0",
     "@material/mwc-drawer": "^0.12.0",
     "@material/mwc-icon-button": "^0.12.0",
+    "@material/mwc-snackbar": "^0.12.0",
     "@material/mwc-textfield": "^0.12.0",
     "@material/mwc-top-app-bar": "^0.12.0",
     "idb": "^5.0.0",

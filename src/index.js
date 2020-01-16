@@ -4,6 +4,7 @@ import "../web_modules/@material/mwc-top-app-bar.js";
 import "../web_modules/@material/mwc-icon-button.js";
 import "../web_modules/@material/mwc-button.js";
 import "../web_modules/@material/mwc-dialog.js";
+import "../web_modules/@material/mwc-snackbar.js";
 
 import { Certificate } from "../web_modules/@pkijs/pkijs/pkijs.js";
 import { fromBER } from "../web_modules/@pkijs/asn1js/asn1.js";
@@ -46,18 +47,25 @@ export class WriteDialog extends LitElement {
       console.log(`${JSON.stringify(ndef, null, '  ')}`);
 
       if ('NDEFWriter' in window) {
+        const controller = new AbortController;
         const writer = new NDEFWriter();
         if (!('write' in writer)) {
           writer.write = writer.push;
         }
 
         try {
-          await writer.write(ndef);
+          this.dispatchEvent(new CustomEvent("pending", {
+            detail: { abortController: controller }
+          }));
+          await writer.write(ndef, { signal: controller.signal });
+          this.dispatchEvent(new Event("success"));
         } catch(err) {
           console.error(err);
         }
       } else {
-        console.error("NFC isn't supported by this device.");
+        this.dispatchEvent(new ErrorEvent("error", {
+          message: "NFC isn't supported by this device."
+        }));
       }
     });
   }
@@ -244,6 +252,41 @@ class MainApplication extends LitElement {
     dialog.open(data);
   }
 
+  onWritePending(ev) {
+    const snackbar = this.shadowRoot.querySelector("#snackbar");
+    const actionBtn = this.shadowRoot.querySelector("#actionButton");
+    const abortController = ev.detail.abortController;
+
+    snackbar.addEventListener('MDCSnackbar:closed', ev => {
+      if (ev.detail.reason === "action") {
+        abortController.abort();
+      }
+    }, { once: true });
+
+    snackbar.labelText = "Please touch NFC tag to write."
+    actionBtn.style.display = "block";
+    actionBtn.textContent = "CANCEL";
+    snackbar.open();
+  }
+
+  onWriteSuccess(ev) {
+    const snackbar = this.shadowRoot.querySelector("#snackbar");
+    const actionBtn = this.shadowRoot.querySelector("#actionButton");
+
+    snackbar.labelText = "Successfully wrote to NFC tag."
+    actionBtn.style.display = "none";
+    snackbar.open();
+  }
+
+  onWriteError(ev) {
+    const snackbar = this.shadowRoot.querySelector("#snackbar");
+    const actionBtn = this.shadowRoot.querySelector("#actionButton");
+
+    snackbar.labelText = ev.message;
+    actionBtn.style.display = "none";
+    snackbar.open();
+  }
+
   async firstUpdated() {
     const drawer = this.shadowRoot.querySelector("mwc-drawer");
     const container = drawer.parentNode;
@@ -290,7 +333,15 @@ class MainApplication extends LitElement {
           </div>
         </div>
       </mwc-drawer>
-      <write-dialog></write-dialog>
+      <mwc-snackbar id="snackbar">
+        <mwc-button id="actionButton" slot="action">CANCEL</mwc-button>
+        <mwc-icon-button id="iconButton" icon="close" slot="dismiss"></mwc-icon-button>
+      </mwc-snackbar>
+      <write-dialog
+        @pending=${(ev) => this.onWritePending(ev)}
+        @success=${(ev) => this.onWriteSuccess(ev)}
+        @error=${(ev) => this.onWriteError(ev)}
+        ></write-dialog>
     `;
   }
 }
