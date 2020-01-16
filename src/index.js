@@ -52,7 +52,7 @@ export class WriteDialog extends LitElement {
 
       console.log(`${JSON.stringify(ndef, replacer, '  ')}`);
 
-      if ('NFCWriter' in window) {
+      if ('NDEFWriter' in window) {
         const writer = new NDEFWriter();
         if (!'write' in writer) {
           writer.write = writer.push;
