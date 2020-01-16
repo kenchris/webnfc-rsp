@@ -54,13 +54,11 @@ export class TokenItem extends LitElement {
     };
   }
 
-  onchange(ev) {
-    this.dispatchEvent(new CustomEvent('change', { detail: { checked: ev.target.checked }}));
-  }
-
   onremove(ev) {
     ev.stopPropagation();
-    this.dispatchEvent(new Event('remove'));
+    this.dispatchEvent(new CustomEvent('remove', {
+      detail: { token: this.token }, bubbles: true
+    }));
   }
 
   render() {
@@ -121,8 +119,14 @@ class MainApplication extends LitElement {
     this.fileStorage = new FileStorage();
   }
 
-  async uploadTokens(ev) {
+  async uploadTokens() {
     await this.fileStorage.chooseTokens();
+    this.tokens = await this.fileStorage.tokens();
+    this.requestUpdate();
+  }
+
+  async removeToken(token) {
+    await this.fileStorage.removeToken(token);
     this.tokens = await this.fileStorage.tokens();
     this.requestUpdate();
   }
@@ -206,7 +210,8 @@ class MainApplication extends LitElement {
             <div id="tokens" role="list" class="mdc-list mdc-list--two-line">
               ${this.tokens.map(token => html`
                 <token-item token=${token.token} expiration=${token.expirationTimestamp}
-                  @click=${_ => this.updateInfo(token)}></token-item>
+                  @click=${_ => this.updateInfo(token)}
+                  @remove=${ev => this.removeToken(ev.detail.token)}></token-item>
               `)}
             </div>
             <br>

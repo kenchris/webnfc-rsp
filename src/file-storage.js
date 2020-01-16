@@ -61,7 +61,6 @@ export class FileStorage extends EventTarget {
     const contents = await file.arrayBuffer();
 
     const res = (await this.dbPromise).put('certificates', contents, 1);
-    this.dispatchEvent(new Event("change"));
   }
 
   async chooseTokens() {
@@ -86,7 +85,8 @@ export class FileStorage extends EventTarget {
     return await db.getAll('tokens');
   }
 
-  async removeToken(name) {
-    this.dispatchEvent(new Event("change"));
+  async removeToken(token) {
+    const db = await this.dbPromise;
+    await db.delete('tokens', token)
   }
 }
