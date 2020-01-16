@@ -44,11 +44,11 @@ export class FileStorage extends EventTarget {
 
     return new Promise(resolve => {
       this.fileSelect.webkitdirectory = dir;
-      this.fileSelect.click();
       this.fileSelect.addEventListener("change",
         _ => resolve(dir ? this.fileSelect.files : this.fileSelect.files[0]),
         { once: true }
       );
+      this.fileSelect.click();
     });
   }
 
