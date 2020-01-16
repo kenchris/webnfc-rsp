@@ -16,9 +16,36 @@ For experimental deployments, [register for Web NFC Origin Trial](https://develo
 
 #### Development
 
-TODO: add build instructions
+This project makes use of ECMAScript Modules (ESM) and runs them directly in the browser using [Snowpack](snowpack.dev). If you install new dependencies using `npm` like `npm install --save @material/mwc-button`, then please run `npx snowpack` afterwards to generate the new modules in `web_modules` folder. Also, the `web_modules` folder should be committed.
+
+To install app dependencies and but any further steps, run
+
+```sh
+$ npm install
+```
+
+ESM compatible modules can be found using [pika.dev](pika.de). Material design web components can be found by searching for `@material/mwc-`. You can try out the demo page here: [Material Web Components demo](https://mwc-demos.glitch.me/)
+
+To optimize deployment modules, run
+
+```sh
+$ npx snowpack --optimize
+```
+
+To test in the browser, run
+
+```sh
+$ npm run deploy
+```
+
+This project makes use of [PKI.js](pkijs.org) which is kind of written as ESM modules, but requires some post-processing in order to actually work. This is done by [rollup](rollupjs.org) using the `rollup.config.js` - any modification to this requires a rebuild.
+
+To rebuild the PKI.js modules, run
+
+```sh
+$ rollup -c rollup.config.js
+```
 
 #### Reporting a security issue
 
 If you have information about a security issue or vulnerability with an Intel-maintained open source project on https://github.com/intel, please send an e-mail to secure@intel.com. Encrypt sensitive information using our PGP public key. For issues related to Intel products, please visit https://security-center.intel.com.
-
