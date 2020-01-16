@@ -36,13 +36,6 @@ export class WriteDialog extends LitElement {
     this.dialog.addEventListener('closed', async ev => {
       if (ev.detail.action !== "write") return;
 
-      const replacer = (key, value) => {
-        if (key === 'fingerprint') {
-          return toReadableFingerprint(value);
-        }
-        return value;
-      }
-
       const ndef = {
         records: [{
           recordType: "text",
@@ -50,7 +43,7 @@ export class WriteDialog extends LitElement {
         }]
       };
 
-      console.log(`${JSON.stringify(ndef, replacer, '  ')}`);
+      console.log(`${JSON.stringify(ndef, null, '  ')}`);
 
       if ('NDEFWriter' in window) {
         const writer = new NDEFWriter();
@@ -172,7 +165,7 @@ export class TokenItem extends LitElement {
 
 customElements.define('token-item', TokenItem);
 
-function toReadableFingerprint(arrayBuffer) {
+function toHashString(arrayBuffer) {
   return Array.prototype.map.call(new Uint8Array(arrayBuffer),
     x => ('00' + x.toString(16)).slice(-2)
   ).join('');
@@ -226,7 +219,7 @@ class MainApplication extends LitElement {
 
   async uploadCertificate(ev) {
     await this.fileStorage.chooseCertificate();
-    this.fingerprint = toReadableFingerprint(await this.certificateFingerprint());
+    this.fingerprint = await this.certificateFingerprint();
   }
 
   async certificateFingerprint() {
@@ -235,9 +228,9 @@ class MainApplication extends LitElement {
     if (certificateBuffer) {
       const asn1src = fromBER(certificateBuffer);
       const certificate = new Certificate({ schema: asn1src.result });
-      fingerprint = await certificate.getKeyHash();
+      fingerprint = await certificate.getKeyHash("SHA-256");
     }
-    return fingerprint;
+    return toHashString(fingerprint);
   }
 
   async updateInfo(token) {
@@ -285,7 +278,7 @@ class MainApplication extends LitElement {
               Upload Tokens
             </mwc-button>
             <hr>
-            Certificate (hash): <span>${toReadableFingerprint(this.fingerprint)}</span>
+            Certificate (hash): <span>${this.fingerprint}</span>
             <hr>
             <div id="tokens" role="list" class="mdc-list mdc-list--two-line">
               ${this.tokens.map(token => html`
