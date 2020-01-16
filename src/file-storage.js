@@ -43,7 +43,13 @@ export class FileStorage extends EventTarget {
     }
 
     return new Promise(resolve => {
-      this.fileSelect.webkitdirectory = dir;
+      const isAndroid = /Android/i.test(navigator.userAgent);
+      if (!isAndroid) {
+        this.fileSelect.webkitdirectory = dir;
+      } else {
+        // If set on Android we get no 'change' event.
+        this.fileSelect.webkitdirectory = false;
+      }
       this.fileSelect.addEventListener("change",
         _ => resolve(dir ? this.fileSelect.files : this.fileSelect.files[0]),
         { once: true }
