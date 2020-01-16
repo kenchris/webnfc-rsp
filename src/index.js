@@ -3,6 +3,7 @@ import "../web_modules/@material/mwc-drawer.js";
 import "../web_modules/@material/mwc-top-app-bar.js";
 import "../web_modules/@material/mwc-icon-button.js";
 import "../web_modules/@material/mwc-button.js";
+import "../web_modules/@material/mwc-dialog.js";
 
 import { Certificate } from "../web_modules/@pkijs/pkijs/pkijs.js";
 import { fromBER } from "../web_modules/@pkijs/asn1js/asn1.js";
@@ -11,6 +12,98 @@ import { style as listStyle } from './mwc-list-item-css.js';
 import './dismissable-item.js';
 import './file-storage.js';
 import { FileStorage } from "./file-storage.js";
+
+export class WriteDialog extends LitElement {
+  static styles = css`
+    #dialog {
+      --mdc-dialog-max-width: 350px;
+    }
+    #container {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      height: 150px;
+    }
+    #bg-nfc {
+      width: 100px;
+      height: 100px;
+      fill: lightgray;
+    }
+  `;
+
+  firstUpdated() {
+    this.dialog = this.shadowRoot.querySelector("#dialog");
+    this.dialog.addEventListener('closed', async ev => {
+      if (ev.detail.action !== "write") return;
+
+      const replacer = (key, value) => {
+        if (key === 'fingerprint') {
+          return toReadableFingerprint(value);
+        }
+        return value;
+      }
+
+      const ndef = {
+        records: [{
+          recordType: "text",
+          data: this.data
+        }]
+      };
+
+      console.log(`${JSON.stringify(ndef, replacer, '  ')}`);
+
+      if ('NFCWriter' in window) {
+        const writer = new NDEFWriter();
+        if (!'write' in writer) {
+          writer.write = writer.push;
+        }
+
+        try {
+          await writer.write(ndef);
+        } catch(err) {
+          console.error(err);
+        }
+      } else {
+        console.error("NFC isn't supported by this device.");
+      }
+    });
+  }
+
+  async open(data) {
+    await this.updateComplete;
+    this.data = data;
+    this.dialog.open = true;
+  }
+
+  render() {
+    return html`
+      <mwc-dialog id="dialog">
+        <div id="container">
+          <svg id="bg-nfc" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path fill="none" d="M0 0h24v24H0V0z"/>
+            <path d="M20,2L4,2c-1.1,0 -2,0.9 -2,2v16c0,1.1 0.9,2 2,2h16c1.1,0
+            2,-0.9 2,-2L22,4c0,-1.1 -0.9,-2 -2,-2zM20,20L4,20L4,4h16v16zM18,6h-5c-1.1,0
+            -2,0.9 -2,2v2.28c-0.6,0.35 -1,0.98 -1,1.72 0,1.1 0.9,2 2,2s2,-0.9 2,-2c0,-0.74
+            -0.4,-1.38 -1,-1.72L13,8h3v8L8,16L8,8h2L10,6L6,6v12h12L18,6z"/>
+          </svg>
+        </div>
+        Write to NFC device
+        <mwc-button
+        dialogAction="write"
+        slot="primaryAction">
+          write
+        </mwc-button>
+        <mwc-button
+          dialogAction="close"
+          slot="secondaryAction">
+          close
+        </mwc-button>
+      </mwc-dialog>
+    `;
+  }
+}
+
+customElements.define("write-dialog", WriteDialog);
 
 export class TokenItem extends LitElement {
   static styles = [
@@ -147,28 +240,15 @@ class MainApplication extends LitElement {
     return fingerprint;
   }
 
-  // Kind of a layout hack
   async updateInfo(token) {
-    const records = [{
-      recordType: "text",
-      data: {
-        token: token.token,
-        fingerprint: this.fingerprint,
-        gateway: "rsp-software-toolkit-gateway"
-      }
-    }];
+    const data = {
+      token: token.token,
+      fingerprint: this.fingerprint,
+      gateway: "rsp-software-toolkit-gateway"
+    };
 
-    const replacer = (key, value) => {
-      if (key === 'fingerprint') {
-        return toReadableFingerprint(value);
-      }
-      return value;
-    }
-
-    const info = this.shadowRoot.querySelector('#info');
-    info.innerHTML = `
-      <pre>records: ${JSON.stringify(records, replacer, '  ')}</pre>
-    `;
+    const dialog = this.shadowRoot.querySelector("write-dialog");
+    dialog.open(data);
   }
 
   async firstUpdated() {
@@ -214,11 +294,10 @@ class MainApplication extends LitElement {
                   @remove=${ev => this.removeToken(ev.detail.token)}></token-item>
               `)}
             </div>
-            <br>
-            <div id="info">Information</div>
           </div>
         </div>
       </mwc-drawer>
+      <write-dialog></write-dialog>
     `;
   }
 }
