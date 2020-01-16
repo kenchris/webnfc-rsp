@@ -54,7 +54,7 @@ export class WriteDialog extends LitElement {
 
       if ('NDEFWriter' in window) {
         const writer = new NDEFWriter();
-        if (!'write' in writer) {
+        if (!('write' in writer)) {
           writer.write = writer.push;
         }
 
