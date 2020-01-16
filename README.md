@@ -18,3 +18,7 @@ For experimental deployments, [register for Web NFC Origin Trial](https://develo
 
 TODO: add build instructions
 
+#### Reporting a security issue
+
+If you have information about a security issue or vulnerability with an Intel-maintained open source project on https://github.com/intel, please send an e-mail to secure@intel.com. Encrypt sensitive information using our PGP public key. For issues related to Intel products, please visit https://security-center.intel.com.
+
