@@ -46,7 +46,7 @@ export class WriteDialog extends LitElement {
       const ndef = {
         records: [{
           recordType: "text",
-          data: this.data
+          data: JSON.stringify(this.data)
         }]
       };
 
