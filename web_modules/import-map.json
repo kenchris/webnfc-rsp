@@ -5,6 +5,7 @@
     "@material/mwc-icon-button": "./@material/mwc-icon-button.js",
     "@material/mwc-textfield": "./@material/mwc-textfield.js",
     "@material/mwc-top-app-bar": "./@material/mwc-top-app-bar.js",
+    "idb": "./idb.js",
     "lit-element": "./lit-element.js",
     "lit-html": "./lit-html.js"
   }

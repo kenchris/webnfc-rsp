@@ -9,6 +9,8 @@ import { fromBER } from "../web_modules/@pkijs/asn1js/asn1.js";
 
 import { style as listStyle } from './mwc-list-item-css.js';
 import './dismissable-item.js';
+import './file-storage.js';
+import { FileStorage } from "./file-storage.js";
 
 export class TokenItem extends LitElement {
   static styles = [
@@ -46,7 +48,7 @@ export class TokenItem extends LitElement {
   ];
 
   static get properties() {
-    return { 
+    return {
       token: { type: String },
       expiration: { type: String }
     };
@@ -79,6 +81,12 @@ export class TokenItem extends LitElement {
 
 customElements.define('token-item', TokenItem);
 
+function toReadableFingerprint(arrayBuffer) {
+  return Array.prototype.map.call(new Uint8Array(arrayBuffer),
+    x => ('00' + x.toString(16)).slice(-2)
+  ).join('');
+}
+
 class MainApplication extends LitElement {
   static styles = css`
   .drawer-content {
@@ -97,7 +105,7 @@ class MainApplication extends LitElement {
   }
 
   #tokens {
-    width: 100%; 
+    width: 100%;
   }
 
   hr {
@@ -106,68 +114,33 @@ class MainApplication extends LitElement {
   `;
 
   tokens = [];
-
-  async uploadTokens(ev) {
-    const entries = await this.chooseFileSystemEntriesFlat({type: 'openDirectory'});
-    const re = new RegExp('^token_[0-9_]+\.json$');
-
-    this.tokens = [];
-
-    for await (const entry of entries) {
-      if (re.test(entry.name)) {
-        const file = entry;
-        const text = await file.text();
-        const json = JSON.parse(text);
-        this.tokens.push(json);
-      }
-    }
-    this.requestUpdate();
-  } 
+  fingerprint = null;
 
   constructor() {
     super();
-    this.fileSelect = document.createElement("input");
-    this.fileSelect.type = "file";
+    this.fileStorage = new FileStorage();
   }
 
-  async chooseFileSystemEntriesFlat(opts) {
-    const dir = opts && opts.type == 'openDirectory';
-
-    // Use Native Filesystem API is avaiable.
-    if ('chooseFileSystemEntries' in window) {
-      const handle = await window.chooseFileSystemEntries(opts);
-      if (dir) {
-        const files = [];
-        for await (const entry of handle.getEntries()) {
-          if (entry.isFile) {
-            files.push(await entry.getFile());
-          }
-        }
-        return files;
-      } else {
-        return await handle.getFile();
-      }
-    }
-
-    return new Promise(resolve => {
-      this.fileSelect.webkitdirectory = dir;
-      this.fileSelect.click();
-      this.fileSelect.addEventListener("change",
-        _ => resolve(dir ? this.fileSelect.files : this.fileSelect.files[0]),
-        { once: true }
-      );
-    });
+  async uploadTokens(ev) {
+    await this.fileStorage.chooseTokens();
+    this.tokens = await this.fileStorage.tokens();
+    this.requestUpdate();
   }
 
   async uploadCertificate(ev) {
-    const file = await this.chooseFileSystemEntriesFlat();
-    const contents = await file.arrayBuffer();
-    this.loadCertificate(contents);
-  } 
+    await this.fileStorage.chooseCertificate();
+    this.fingerprint = toReadableFingerprint(await this.certificateFingerprint());
+  }
 
-  async loadCertificate(certificateBuffer) {
-    const asn1src = fromBER(certificateBuffer);
-    this.certificate = new Certificate({ schema: asn1src.result });
+  async certificateFingerprint() {
+    let fingerprint = null;
+    const certificateBuffer = await this.fileStorage.certificate();
+    if (certificateBuffer) {
+      const asn1src = fromBER(certificateBuffer);
+      const certificate = new Certificate({ schema: asn1src.result });
+      fingerprint = await certificate.getKeyHash();
+    }
+    return fingerprint;
   }
 
   // Kind of a layout hack
@@ -176,16 +149,14 @@ class MainApplication extends LitElement {
       recordType: "text",
       data: {
         token: token.token,
-        fingerprint: await this.certificate.getKeyHash(),
+        fingerprint: this.fingerprint,
         gateway: "rsp-software-toolkit-gateway"
       }
     }];
 
     const replacer = (key, value) => {
       if (key === 'fingerprint') {
-        return Array.prototype.map.call(new Uint8Array(value),
-            x => ('00' + x.toString(16)).slice(-2)
-          ).join('');
+        return toReadableFingerprint(value);
       }
       return value;
     }
@@ -203,14 +174,10 @@ class MainApplication extends LitElement {
       drawer.open = !drawer.open;
     });
 
-    const tres = await fetch("files/token_20181111_130018.json");
-    const json = await tres.json();
-    this.tokens = [json];
+    this.tokens = await this.fileStorage.tokens();
+    this.fingerprint = await this.certificateFingerprint();
 
-    const res = await fetch("files/rsp.der");
-    const certificateBuffer = await res.arrayBuffer();
-    this.loadCertificate(certificateBuffer)
-    this.updateInfo(this.tokens[this.tokens.length - 1]);
+    this.requestUpdate();
   }
 
   render() {
@@ -233,6 +200,8 @@ class MainApplication extends LitElement {
             <mwc-button @click="${ev => this.uploadTokens(ev)}">
               Upload Tokens
             </mwc-button>
+            <hr>
+            Certificate (hash): <span>${toReadableFingerprint(this.fingerprint)}</span>
             <hr>
             <div id="tokens" role="list" class="mdc-list mdc-list--two-line">
               ${this.tokens.map(token => html`
