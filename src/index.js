@@ -206,7 +206,7 @@ class MainApplication extends LitElement {
   `;
 
   tokens = [];
-  fingerprint = null;
+  fingerprint = "";
 
   constructor() {
     super();
@@ -321,7 +321,9 @@ class MainApplication extends LitElement {
               Upload Tokens
             </mwc-button>
             <hr>
-            Certificate (hash): <span>${this.fingerprint}</span>
+            Certificate (hash):<br><br>
+              <span>${this.fingerprint.substr(0, 32)}</span>
+              <span>${this.fingerprint.substr(32, 64)}</span>
             <hr>
             <div id="tokens" role="list" class="mdc-list mdc-list--two-line">
               ${this.tokens.map(token => html`
