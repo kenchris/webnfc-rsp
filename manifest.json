@@ -39,7 +39,7 @@
           "sizes": "512x512",
           "type": "image/png"
         }],
-    "start_url": "/",
+    "start_url": "/webnfc-rsp/",
     "background_color": "#303F9F",
     "display": "standalone",
     "theme_color": "#FF4081"
