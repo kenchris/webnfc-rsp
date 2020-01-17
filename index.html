@@ -1,6 +1,9 @@
 <html>
-  <head><title>Intel RSP Sensor NFC</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <head><title>Intel® RSP Sensor NFC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#FF4081">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta http-equiv="origin-trial" content="ApLV8+u4YYdqmA9wp9cBq8/Czs67UB9FVUdVEmZ6og+H1xjK6UH94SM+eUgDDMp9i2/tlRf0tvSjubsT9AVxYQQAAABceyJvcmlnaW4iOiJodHRwczovL2tlbmNocmlzLmdpdGh1Yi5pbzo0NDMiLCJmZWF0dXJlIjoiTmF0aXZlRmlsZVN5c3RlbSIsImV4cGlyeSI6MTU4MjcyNjExMX0=">
   <meta http-equiv="origin-trial" content="ArsGkuV4SdCp2hKKhRv6DdhLocZuRpJddSu+mfjZmB0DN9nS6BNho7hYimTEe+UNu9M24YHpykvRKowzWXTLIAsAAABSeyJvcmlnaW4iOiJodHRwczovL2tlbmNocmlzLmdpdGh1Yi5pbzo0NDMiLCJmZWF0dXJlIjoiV2ViTkZDIiwiZXhwaXJ5IjoxNTgyNzI2MDg2fQ==">
   <style>
@@ -27,6 +30,13 @@
   </head>
   <body>
     <script type=module src="src/index.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js');
+        });
+      }
+      </script>
     <main-app></main-app>
   </body>
 </html>

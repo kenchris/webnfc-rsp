@@ -20,33 +20,5 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-/**
- * Stores result from applyPassive to avoid redundant processing to detect
- * passive event listener support.
- */
-var supportsPassive_;
-/**
- * Determine whether the current browser supports passive event listeners, and
- * if so, use them.
- */
-function applyPassive(globalObj, forceRefresh) {
-    if (globalObj === void 0) { globalObj = window; }
-    if (forceRefresh === void 0) { forceRefresh = false; }
-    if (supportsPassive_ === undefined || forceRefresh) {
-        var isSupported_1 = false;
-        try {
-            globalObj.document.addEventListener('test', function () { return undefined; }, {
-                get passive() {
-                    isSupported_1 = true;
-                    return isSupported_1;
-                },
-            });
-        }
-        catch (e) {
-        } // tslint:disable-line:no-empty cannot throw error due to tests. tslint also disables console.log.
-        supportsPassive_ = isSupported_1;
-    }
-    return supportsPassive_ ? { passive: true } : false;
-}
-
-export { applyPassive as a };
+var t;function e(e,i){if(void 0===e&&(e=window),void 0===i&&(i=!1),void 0===t||i){var n=!1;try{e.document.addEventListener("test",(function(){}),{get passive(){return n=!0}})}catch(t){}t=n}return!!t&&{passive:!0}}export{e as a};
+//# sourceMappingURL=events-bc34a64f.js.map
