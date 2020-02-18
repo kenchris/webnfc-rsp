@@ -232,9 +232,19 @@ class MainApplication extends LitElement {
 
   async certificateFingerprint() {
     let fingerprint = null;
-    const certificateBuffer = await this.fileStorage.certificate();
+    const rawCertificateBuffer = await this.fileStorage.certificate();
+    const textCertificateBuffer = rawCertificateBuffer.replace(new RegExp('\r?\n','g'), '');
+
+    const splitPEM = textCertificateBuffer.split(`-----END CERTIFICATE-----`).map(el => {
+      return el ? el.replace('-----BEGIN CERTIFICATE-----', '') : undefined
+    }).filter(Boolean);
+
+    const certificateBuffer = splitPEM.map(base64 =>
+      Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+    ).filter(Boolean);
+
     if (certificateBuffer) {
-      const asn1src = fromBER(certificateBuffer);
+      const asn1src = fromBER(certificateBuffer[0].buffer);
       const certificate = new Certificate({ schema: asn1src.result });
       fingerprint = await certificate.getKeyHash("SHA-256");
     }

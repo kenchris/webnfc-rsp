@@ -64,7 +64,7 @@ export class FileStorage extends EventTarget {
 
   async chooseCertificate() {
     const file = await this.chooseFileSystemEntriesFlat();
-    const contents = await file.arrayBuffer();
+    const contents = await file.text();
 
     const res = (await this.dbPromise).put('certificates', contents, 1);
   }
