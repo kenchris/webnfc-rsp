@@ -26,7 +26,7 @@ export class FileStorage extends EventTarget {
   async chooseFileSystemEntriesFlat(opts) {
     const dir = opts && opts.type == 'openDirectory';
 
-    // Use Native Filesystem API is avaiable.
+    // Use Native Filesystem API is available.
     if ('chooseFileSystemEntries' in window) {
       const handle = await window.chooseFileSystemEntries(opts);
       if (dir) {
@@ -64,14 +64,33 @@ export class FileStorage extends EventTarget {
 
   async chooseCertificate() {
     const file = await this.chooseFileSystemEntriesFlat();
-    const contents = await file.text();
+
+    let contents;
+
+    // Convert CRT to DER (binary)
+    if (file.name.endsWith(".crt")) {
+      const rawBuffer = await file.text();
+      const textCertificateBuffer = rawBuffer.replace(new RegExp('\r?\n','g'), '');
+
+      const splitPEM = textCertificateBuffer.split(`-----END CERTIFICATE-----`).map(el => {
+        return el ? el.replace('-----BEGIN CERTIFICATE-----', '') : undefined
+      }).filter(Boolean);
+
+      const certificateBuffer = splitPEM.map(base64 =>
+        Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+      ).filter(Boolean);
+
+      contents = certificateBuffer[0].buffer;
+    } else if (file.name.endsWith(".der")) {
+      contents = await file.arrayBuffer();
+    }
 
     const res = (await this.dbPromise).put('certificates', contents, 1);
   }
 
   async chooseTokens() {
     const entries = await this.chooseFileSystemEntriesFlat({type: 'openDirectory'});
-    const re = new RegExp('^token_[0-9_]+\.json$');
+    const re = new RegExp('^token_[a-z0-9_]+\.json$', 'i');
 
     const db = await this.dbPromise;
     for await (const entry of entries) {
